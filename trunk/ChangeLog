@@ -2,3 +2,7 @@
 
 	* tclgpg.tcl, pkgIndex.tcl, license.terms: Started TclGPG library.
 
+	* tclgpg.tcl: Preliminarily implemented gpg::info procedure and
+	  start-key, next-key and done-key context operations (though they
+	  are useless because gpg output parsing isn't implemented yet).
+
