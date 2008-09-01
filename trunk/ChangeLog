@@ -1,0 +1,4 @@
+2008-09-01  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl, pkgIndex.tcl, license.terms: Started TclGPG library.
+
