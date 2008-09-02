@@ -1,3 +1,8 @@
+2008-09-02  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Catch gpg execution errors. Started to implement parsing
+	  of keylist output. Traversing keylist is almost usable now.
+
 2008-09-01  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, pkgIndex.tcl, license.terms: Started TclGPG library.

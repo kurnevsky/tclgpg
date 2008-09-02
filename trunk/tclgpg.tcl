@@ -12,6 +12,7 @@
 package provide gpg 1.0
 
 namespace eval ::gpg {
+    variable gpgExecutable /usr/bin/gpg
     variable operations [list info cancel wait get set encrypt decrypt sign \
                               verify start-key next-key done-key info-key \
                               start-trustitem next-trustitem done-trustitem \
@@ -281,6 +282,10 @@ proc ::gpg::StartKey {token args} {
 
     set keystoken [namespace current]::keys$state(id)
     variable $keystoken
+    upvar 0 $keystoken keys
+
+    catch {unset keys}
+    array set keys {}
 
     set state(keystoken) $keystoken
 
@@ -294,7 +299,7 @@ proc ::gpg::StartKey {token args} {
                            --with-fingerprint \
                            $operation --] $patterns]
 
-    Parse $keystoken $gpgOutput
+    Parse keys $gpgOutput
     set state(searchid) [array startsearch $keystoken]
 
     return
@@ -328,18 +333,232 @@ proc ::gpg::InfoKey {token args} {
     variable $token
     upvar 0 $token state
 
-    # TODO
+    foreach {key val} $args {
+        switch -- $key {
+            -operation {}
+            -key {
+                set fingerprint $val
+            }
+            default {
+                return -code error \
+                    [format "bad switch \"%s\": must be -operation or -key" \
+                            $key]
+            }
+        }
+    }
+
+    variable $state(keystoken)
+    upvar 0 $state(keystoken) keys
+
+    if {[::info exists keys($fingerprint)]} {
+        return $keys($fingerprint)
+    } else {
+        return -code error "Invalid Value"
+    }
 }
 
-proc ::gpg::Parse {keystoken gpgOutput} {
-    # TODO
+proc ::gpg::Parse {keysVar gpgOutput} {
+    upvar 1 $keysVar keys
+
+    set key {}
+    foreach line [split $gpgOutput "\n"] {
+        set fields [split $line ":"]
+        switch -- [lindex $fields 0] {
+            pub -
+            sec -
+            crt -
+            crs {
+                # Store the current key and start a new one
+                array set tmp $key
+                if {[::info exists tmp(fingerprint)]} {
+                    set keys($tmp(fingerprint)) $key
+                }
+                array unset tmp
+                set key {}
+            }
+            sub -
+            ssb {
+                # Start a new subkey
+            }
+            sig {
+                # Signature
+            }
+        }
+        set key [concat $key [ParseRecord $fields]]
+    }
+
+    # Store the last key
+    array set tmp $key
+    if {[::info exists tmp(fingerprint)]} {
+        set keys($tmp(fingerprint)) $key
+    }
+
+    return
+}
+
+proc ::gpg::ParseRecord {fields} {
+    switch -- [lindex $fields 0] {
+	pub -
+	sec -
+        crt -
+        crs {
+            # pub: public key
+            # sec: secret key
+            # crt: X.509 certificate
+            # crs: X.509 certificate and private key available
+            set result [Trust [lindex $fields 1]]
+            lappend result length    [lindex $fields 2]
+            lappend result algorithm [Algorithm [lindex $fields 3]]
+            lappend result keyid     [lindex $fields 4]
+            lappend result created   [lindex $fields 5]
+            if {![string equal [lindex $fields 6] ""]} {
+                lappend result expire [lindex $fields 6]
+            }
+            # TODO
+            lappend result owner-trust [lindex $fields 8]
+            # TODO
+            lappend result key-capability [lindex $fields 11]
+            return $result
+        }
+	sub {
+            # subkey (secondary key)
+        }
+	ssb {
+            # secret subkey (secondary key)
+        }
+	uid {
+            # user id (only field 10 is used)
+            set userid [string map {\\x3a :} [lindex $fields 9]]
+            if {[regexp {^(.*\S)\s*\((.*)\)\s*<(.*)>$} $userid -> \
+                        name comment email]} {
+                return [list userid $userid name $name comment $comment \
+                             email $email]
+            } elseif {[regexp {^(.*\S)\s*<(.*)>$} $userid -> \
+                              name email]} {
+                return [list userid $userid name $name email $email]
+            } else {
+                return [list userid $userid]
+            }
+        }
+	uat {
+            # user attribute (same as user id except for field 10)
+        }
+        sig {
+            # signature
+        }
+        rev {
+            # revocation signature
+        }
+	fpr {
+            # fingerprint: (fingerprint is in field 10)
+            set fingerprint [lindex $fields 9]
+            return [list fingerprint $fingerprint]
+        }
+	pkd {
+            # public key data (special field format)
+        }
+        grp {
+            # reserved for gpgsm
+        }
+        rvk {
+            # revocation key
+        }
+        tru {
+            # trust database information
+        }
+        spk {
+            # signature subpacket
+        }
+        default {
+            return {}
+        }
+    }
+}
+
+proc ::gpg::Trust {code} {
+    switch -- $code {
+	o {
+            # Unknown (this key is new to the system)
+            return {validity unknown}
+        }
+        i {
+            # The key is invalid (e.g. due to a missing self-signature)
+            return {key-invalid 1}
+        }
+	d {
+            # The key has been disabled
+	    # (deprecated - use the 'D' in field 12 instead)
+            return {key-disabled 1}
+        }
+	r {
+            # The key has been revoked
+            return {key-revoked 1}
+        }
+	e {
+            # The key has expired
+            return {key-expired 1}
+        }
+	- {
+            # Unknown trust (i.e. no value assigned)
+            return {validity unknown}
+        }
+	q {
+            # Undefined trust
+	    # '-' and 'q' may safely be treated as the same
+	    # value for most purposes
+            return {validity undefined}
+        }
+	n {
+            # Don't trust this key at all
+            return {validity never}
+        }
+	m {
+            # There is marginal trust in this key
+            return {validity marginal}
+        }
+	f {
+            # The key is fully trusted
+            return {validity full}
+        }
+	u {
+            # The key is ultimately trusted.  This often means
+	    # that the secret key is available, but any key may
+	    # be marked as ultimately trusted.
+            return {validity ultimate}
+        }
+    }
+}
+
+proc ::gpg::Algorithm {code} {
+    switch -- $code {
+ 	1 -
+        2 -
+        3 {
+            # RSA
+            return RSA
+        }
+	16 {
+            # Elgamal (encrypt only)
+            return ElG
+        }
+	17 {
+            # DSA (sometimes called DH, sign only)
+            return DSA
+        }
+	20 {
+            # Elgamal (sign and encrypt - don't use them!)
+            return ElG
+        }
+        default {
+            return Unknown
+        }
+    }
 }
 
 proc ::gpg::ExecGPG {args} {
-    # TODO: catch errors
-    set fd [open |[linsert $args 0 gpg]]
-    set data [read $fd]
-    close $fd
+    variable gpgExecutable
+
+    catch [linsert $args 0 exec $gpgExecutable] data
     return $data
 }
 
