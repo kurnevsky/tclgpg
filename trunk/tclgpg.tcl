@@ -173,7 +173,7 @@ proc ::gpg::Exec {token args} {
     array set opts $args
 
     if {![::info exists opts(-operation)]} {
-            return -code error -errorinfo "Missing operation"
+            return -code error "Missing operation"
     }
 
     switch -- $opts(-operation) {
@@ -186,10 +186,16 @@ proc ::gpg::Exec {token args} {
         next-key  { return [eval [list NextKey  $token] $args] }
         done-key  { return [eval [list DoneKey  $token] $args] }
         info-key  { return [eval [list InfoKey  $token] $args] }
+        start-trustitem -
+        next-trustitem  -
+        done-trustitem  -
+        info-trustitem  {
+            return -code error \
+                   "GPG doesn't support --list-trust-path option"
+        }
         default {
             return -code error \
-                   -errorinfo [format "Illegal operation \"%s\"" \
-                                      $opts(-operation)]
+                   [format "Illegal operation \"%s\"" $opts(-operation)]
         }
     }
 }
