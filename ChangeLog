@@ -3,6 +3,11 @@
 	* tclgpg.tcl: Catch gpg execution errors. Started to implement parsing
 	  of keylist output. Traversing keylist is almost usable now.
 
+	* tclgpg.tcl: Return error on start-trustitem, next-trustitem,
+	  done-trustitem, info-trustitem operation because in GPGME the
+	  corresponding operations use --list-trust-path option which isn't
+	  supported by gpg anymore.
+
 2008-09-01  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, pkgIndex.tcl, license.terms: Started TclGPG library.
