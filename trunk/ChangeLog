@@ -1,3 +1,9 @@
+2008-09-03  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Added a check for working gpg executable on the package
+	  load. Converted collecting gpg data into a channel because it has to
+	  be configured to use UTF-8 encoding.
+
 2008-09-02  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Catch gpg execution errors. Started to implement parsing

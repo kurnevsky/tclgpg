@@ -13,6 +13,24 @@ package provide gpg 1.0
 
 namespace eval ::gpg {
     variable gpgExecutable /usr/bin/gpg
+
+    if {[catch {exec $gpgExecutable --version} msg] || \
+            ![string equal -length 12 $msg "gpg (GnuPG) "]} {
+
+        # Destory the current namespace if it contains nothing except
+        # the gpgExecutable variable. Otherwise it contains user data,
+        # so it must be preserved.
+
+        if {[llength [info vars [namespace current]::*]] == 1 && \
+                [llength [info procs [namespace current]::*]] == 0} {
+            namespace delete [namespace current]
+        } else {
+            unset gpgExecutable
+        }
+
+        return -code error "GnuPG binary is unusable"
+    }
+
     variable operations [list info cancel wait get set encrypt decrypt sign \
                               verify start-key next-key done-key info-key \
                               start-trustitem next-trustitem done-trustitem \
@@ -564,7 +582,19 @@ proc ::gpg::Algorithm {code} {
 proc ::gpg::ExecGPG {args} {
     variable gpgExecutable
 
-    catch [linsert $args 0 exec $gpgExecutable] data
+    set fd [open |[linsert $args 0 $gpgExecutable]]
+
+    # Gpg output is in UTF-8 encoding, so fconfigureing the channel.
+    # TODO: Asynchronous processing (non-blocking channel)
+
+    fconfigure $fd -encoding utf-8
+    set data [read $fd]
+
+    # If gpg returns nonzero status or writes to stderr, close raises
+    # an error. So, the catch is necessary.
+    # TODO: Process the error
+
+    catch {close $fd}
     return $data
 }
 
