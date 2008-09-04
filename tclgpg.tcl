@@ -39,12 +39,16 @@ namespace eval ::gpg {
     variable properties [list protocol armor textmode number-of-certs \
                               keylistmode passphrase-callback \
                               progress-callback idle-callback signers]
+
+    variable validities [list unknown undefined never marginal full ultimate]
 }
 
 # ::gpg::info --
 #
 
 proc ::gpg::info {args} {
+    variable validities
+
     switch -- [llength $args] {
         0 {
             return [list datatypes signature-status signature-modes \
@@ -76,7 +80,7 @@ proc ::gpg::info {args} {
                                  error-token signature-summary]
                 }
                 validity {
-                    return [list unknown undefined never marginal full ultimate]
+                    return $validities
                 }
                 capabilities {
                     return [list encrypt sign certify]
@@ -141,7 +145,7 @@ proc ::gpg::context {} {
 #       Unset state variable corresponding to a context token.
 #
 # Arguments:
-#       token       A GPG context token created in ::gpg::new.
+#       token       A GPG context token created in ::gpg::context.
 #       args        (unused) Arguments added by trace.
 #
 # Result
@@ -172,7 +176,7 @@ proc ::gpg::Free {token args} {
 #       calls [$token -operation ...].
 #
 # Arguments:
-#       token       A GPG context token created in ::gpg::new.
+#       token       A GPG context token created in ::gpg::context.
 #       args        Arguments serialized array. It must contain pair
 #                   -operation <op>. The other arguments are operation-
 #                   dependent.
@@ -184,26 +188,28 @@ proc ::gpg::Free {token args} {
 #       The side effects of a corresponding operation.
 
 proc ::gpg::Exec {token args} {
-    variable properties
-    variable $token
-    upvar 0 $token state
-
-    array set opts $args
-
-    if {![::info exists opts(-operation)]} {
-            return -code error "Missing operation"
+    set newArgs {}
+    foreach {key val} $args {
+        switch -- $key {
+            -operation { set op $val }
+            default { lappend newArgs $key $val }
+        }
     }
 
-    switch -- $opts(-operation) {
-        info      { return [eval [list Info     $token] $args] }
-        cancel    { return [eval [list Cancel   $token] $args] }
-        wait      { return [eval [list Wait     $token] $args] }
-        get       { return [eval [list Get      $token] $args] }
-        set       { return [eval [list Set      $token] $args] }
-        start-key { return [eval [list StartKey $token] $args] }
-        next-key  { return [eval [list NextKey  $token] $args] }
-        done-key  { return [eval [list DoneKey  $token] $args] }
-        info-key  { return [eval [list InfoKey  $token] $args] }
+    if {![::info exists op]} {
+        return -code error "Missing operation"
+    }
+
+    switch -- $op {
+        info      { return [eval [list Info     $token] $newArgs] }
+        cancel    { return [eval [list Cancel   $token] $newArgs] }
+        wait      { return [eval [list Wait     $token] $newArgs] }
+        get       { return [eval [list Get      $token] $newArgs] }
+        set       { return [eval [list Set      $token] $newArgs] }
+        start-key { return [eval [list StartKey $token] $newArgs] }
+        next-key  { return [eval [list NextKey  $token] $newArgs] }
+        done-key  { return [eval [list DoneKey  $token] $newArgs] }
+        info-key  { return [eval [list InfoKey  $token] $newArgs] }
         start-trustitem -
         next-trustitem  -
         done-trustitem  -
@@ -212,8 +218,7 @@ proc ::gpg::Exec {token args} {
                    "GPG doesn't support --list-trust-path option"
         }
         default {
-            return -code error \
-                   [format "Illegal operation \"%s\"" $opts(-operation)]
+            return -code error [format "Illegal operation \"%s\"" $op]
         }
     }
 }
@@ -596,6 +601,219 @@ proc ::gpg::ExecGPG {args} {
 
     catch {close $fd}
     return $data
+}
+
+# ::gpg::recipient --
+#
+#       Create a new GPG recipient token.
+#
+# Arguments:
+#       None.
+#
+# Result:
+#       A recipient token (which is used as a procedure).
+#
+# Side effects:
+#       A new procedure and a state variable are created. Also deleting of
+#       the procedure is traced to unset the state variable.
+
+proc ::gpg::recipient {} {
+    variable rid
+
+    if {![::info exists rid]} {
+        set rid 0
+    }
+
+    set token [namespace current]::recipient[incr rid]
+    variable $token
+    upvar 0 $token state
+
+    set state(recipients) {}
+
+    proc $token {args} "eval {[namespace current]::RecipientExec} {$token} \$args"
+
+    trace add command $token delete [namespace code [list RecipientFree $token]]
+
+    return $token
+}
+
+# ::gpg::RecipientFree --
+#
+#       Unset state variable corresponding to a recipient token.
+#
+# Arguments:
+#       token       A recipient context token created in ::gpg::recipient.
+#       args        (unused) Arguments added by trace.
+#
+# Result
+#       An empty string.
+#
+# Side effects:
+#       A state variable is destroyed.
+
+proc ::gpg::RecipientFree {token args} {
+    variable $token
+    upvar 0 $token state
+
+    catch {unset state}
+    return
+}
+
+# ::gpg::RecipientExec --
+#
+#       Execute a recipient operation. This procedure is invoked when a user
+#       calls [$token -operation ...] for a recipient token.
+#
+# Arguments:
+#       token       A recipient token created in ::gpg::recipient.
+#       args        Arguments serialized array. It must contain pair
+#                   -operation <op>. The other arguments are operation-
+#                   dependent.
+#
+# Result:
+#       The result of a corresponding operation.
+#
+# Side effects:
+#       The side effects of a corresponding operation.
+
+proc ::gpg::RecipientExec {token args} {
+    set newArgs {}
+    foreach {key val} $args {
+        switch -- $key {
+            -operation { set op $val }
+            default { lappend newArgs $key $val }
+        }
+    }
+
+    if {![::info exists op]} {
+        return -code error "Missing operation"
+    }
+
+    switch -- $op {
+        info  { return {info add count list} }
+        add   { return [eval [list RecipientAdd   $token] $newArgs] }
+        count { return [eval [list RecipientCount $token] $newArgs] }
+        list  { return [eval [list RecipientList  $token] $newArgs] }
+        default {
+            return -code error [format "Illegal operation \"%s\"" $op]
+        }
+    }
+}
+
+# ::gpg::RecipientAdd --
+#
+#       Add a recipient to a recipient token.
+#
+# Arguments:
+#       token           A recipient token created by ::gpg::recipient.
+#       -name name      A recipient name.
+#       -validity val   (optional, defaults to unknown) A minimum acceptable
+#                       validity.
+#
+# Result:
+#       Empty string.
+#
+# Side effects:
+#       A pair {name val} is added to a recipient list.
+
+proc ::gpg::RecipientAdd {token args} {
+    variable validities
+    variable $token
+    upvar 0 $token state
+
+    set validity unknown
+    foreach {key val} $args {
+        switch -- $key {
+            -name { set name $val }
+            -validity {
+                set validity $val
+            }
+        }
+    }
+
+    if {![::info exists name]} {
+        return -code error "-name switch must be provided"
+    }
+
+    if {[lsearch -exact $validities $val] < 0} {
+        return -code error \
+               [format "bad validity \"%s\": must be %s", \
+                       $val [JoinOptions $validities]]
+    }
+
+    lappend state(recipients) [list $name $validity]
+    return
+}
+
+# ::gpg::RecipentCount --
+#
+#       Return recipients count for recipient token.
+#
+# Arguments:
+#       token           A recipient token created by ::gpg::recipient.
+#
+# Result:
+#       A number of added recipients.
+#
+# Side effects:
+#       None.
+
+proc ::gpg::RecipientCount {token} {
+    variable $token
+    upvar 0 $token state
+
+    return [llength $state(recipients)]
+}
+
+# ::gpg::RecipentCount --
+#
+#       Return list of recipient names for recipient token.
+#
+# Arguments:
+#       token           A recipient token created by ::gpg::recipient.
+#
+# Result:
+#       A list of added recipient names.
+#
+# Side effects:
+#       None.
+
+proc ::gpg::RecipientList {token} {
+    variable $token
+    upvar 0 $token state
+
+    set recs {}
+    foreach r $state(recipients) {
+        lappend recs [lindex $r 0]
+    }
+    return $recs
+}
+
+# ::gpg::JoinOptions --
+#
+#       A helper procedure which formats supplied options to show them to a
+#       user. For example {op1 op2 op3} is formatted to "op1, op2, or op3".
+#       It is useful for error messages.
+#
+# Arguments:
+#       optList         Options list.
+#
+# Result:
+#       Formatted string.
+#
+# Side effects:
+#       None.
+
+proc ::gpg::JoinOptions {optList} {
+    switch -- [llength $optList] {
+        0 - 1 {
+            return [lindex $optList 0]
+        }
+        default {
+            return "[join [lrange $optList 0 end-1] ", "], or\
+                    [lindex $optList end]"
+        }
+    }
 }
 
 # vim:ts=8:sw=4:sts=4:et
