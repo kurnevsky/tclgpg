@@ -1,3 +1,12 @@
+2008-09-05  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Implemented message encryption with optional signing.
+	  Since it is impossible to close only a writing half of a channel in
+	  Tcl 8.5 or older, in order to be able to supply a passphrase to gpg
+	  process a dependency on Tclx has to be introduced (command [pipe] is
+	  used, or alternatively [chan pipe] from Tcl 8.6). Also, a few typos
+	  in recipients code are fixed.
+
 2008-09-04  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Implemented creating recipient token and its operations.
