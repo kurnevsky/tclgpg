@@ -9,6 +9,10 @@
 #
 # $Id$
 
+if {![package vsatisfies [package require Tcl] 8.6]} {
+    package require Tclx
+}
+
 package provide gpg 1.0
 
 namespace eval ::gpg {
@@ -210,6 +214,7 @@ proc ::gpg::Exec {token args} {
         next-key  { return [eval [list NextKey  $token] $newArgs] }
         done-key  { return [eval [list DoneKey  $token] $newArgs] }
         info-key  { return [eval [list InfoKey  $token] $newArgs] }
+        encrypt   { return [eval [list Encrypt  $token] $newArgs] }
         start-trustitem -
         next-trustitem  -
         done-trustitem  -
@@ -266,6 +271,47 @@ proc ::gpg::Info {token args} {
     return $operations
 }
 
+proc ::gpg::Encrypt {token args} {
+    variable $token
+    upvar 0 $token state
+
+    set sign false
+    foreach {key val} $args {
+        switch -- $key {
+            -input { set input $val }
+            -recipients { set recipients $val }
+            -sign { set sign $val }
+        }
+    }
+
+    if {[Get $token -property armor]} {
+        set params {--armor}
+    } else {
+        set params {}
+    }
+
+    if {$sign} {
+        lappend params --sign
+    } else {
+        lappend params --batch
+    }
+
+    foreach name [$recipients -operation list] {
+        lappend params -r $name
+    }
+
+    return [eval [list ExecGPG $token $input \
+                               --no-tty \
+                               --status-fd 2 \
+                               --logger-fd 2 \
+                               --command-fd 0 \
+                               --no-verbose \
+                               --encrypt \
+                               --output -] \
+                               $params \
+                               --]
+}
+
 proc ::gpg::StartKey {token args} {
     variable $token
     upvar 0 $token state
@@ -280,16 +326,7 @@ proc ::gpg::StartKey {token args} {
 
     foreach {key val} $args {
         switch -- $key {
-            -operation {}
             -patterns {
-                if {[string first < $val] >= 0 || \
-                        [string first > $val] >= 0 || \
-                        [string first | $val] >= 0} {
-                    # Patterns will go to [exec] call, so filter dangerous
-                    # symbols.
-                    return -code error \
-                           "illegal symbol \"<\", \">\", or \"|\" in patterns"
-                }
                 set patterns $val
             }
             -secretonly {
@@ -318,10 +355,10 @@ proc ::gpg::StartKey {token args} {
 
     set state(keystoken) $keystoken
 
-    set gpgOutput [eval [list ExecGPG --batch \
-                           --comment "" \
+    set gpgOutput [eval [list ExecGPG $token "" \
+                           --batch \
                            --no-tty \
-                           --charset utf8 \
+                           --status-fd 2 \
                            --with-colons \
                            --fixed-list-mode \
                            --with-fingerprint \
@@ -364,7 +401,6 @@ proc ::gpg::InfoKey {token args} {
 
     foreach {key val} $args {
         switch -- $key {
-            -operation {}
             -key {
                 set fingerprint $val
             }
@@ -584,22 +620,86 @@ proc ::gpg::Algorithm {code} {
     }
 }
 
-proc ::gpg::ExecGPG {args} {
+# TODO: Asynchronous processing (non-blocking channel)
+
+proc ::gpg::ExecGPG {token input args} {
     variable gpgExecutable
 
-    set fd [open |[linsert $args 0 $gpgExecutable]]
+    puts $args
 
-    # Gpg output is in UTF-8 encoding, so fconfigureing the channel.
-    # TODO: Asynchronous processing (non-blocking channel)
+    # Raise an error if there are dangerous arguments
 
-    fconfigure $fd -encoding utf-8
-    set data [read $fd]
+    foreach arg $args {
+        if {[string first < $arg] == 0 || [string first > $arg] == 0 || \
+            [string first 2> $arg] == 0 || [string first | $arg] == 0 || \
+            [string equal & $arg]} {
+
+            return -code error \
+                   [format "forbidden argument \"%s\" in exec call" $arg]
+        }
+    }
+
+    if {[string equal $input ""]} {
+        set fd [open |[linsert $args 0 $gpgExecutable] r]
+        set data [read $fd]
+        puts $data
+        catch {close $fd}
+        return $data
+    }
+
+    # Using either [chan pipe] from Tcl 8.6 or [pipe] from TclX.
+    # It's the only way of 'half-closing' a channel.
+
+    if {[catch {chan pipe} pList]} {
+        set pList [pipe]
+    }
+    foreach {pRead pWrite} $pList break
+
+    if {[catch {chan pipe} qList]} {
+        set qList [pipe]
+    }
+    foreach {qRead qWrite} $qList break
+
+    # Redirect stdout and stderr to pipes
+
+    lappend args >@ $pWrite 2>@ $qWrite
+
+    set fd [open |[linsert $args 0 $gpgExecutable] w]
+    fconfigure $fd -buffering none
+    close $pWrite
+    close $qWrite
+
+    while {[gets $qRead line] >= 0} {
+        puts $line
+        set fields [split $line]
+
+        if {![string equal [lindex $fields 0] "\[GNUPG:\]"]} continue
+
+        switch -- [lindex $fields 1] {
+            BEGIN_ENCRYPTION { break }
+            BEGIN_SIGNING { break }
+            NEED_PASSPHRASE {
+                puts $fd [eval [Get $token -property passphrase-callback] \
+                               [lrange $fields 2 end]]
+            }
+        }
+    }
+
+    puts $fd $input
+    catch {close $fd}
+
+    set control [read $qRead]
+    puts $control
+
+
+    set data [read $pRead]
+    puts $data
 
     # If gpg returns nonzero status or writes to stderr, close raises
     # an error. So, the catch is necessary.
     # TODO: Process the error
 
-    catch {close $fd}
+    catch {close $pRead}
     return $data
 }
 
@@ -735,9 +835,9 @@ proc ::gpg::RecipientAdd {token args} {
         return -code error "-name switch must be provided"
     }
 
-    if {[lsearch -exact $validities $val] < 0} {
+    if {[lsearch -exact $validities $validity] < 0} {
         return -code error \
-               [format "bad validity \"%s\": must be %s", \
+               [format "bad validity \"%s\": must be %s" \
                        $val [JoinOptions $validities]]
     }
 
@@ -810,7 +910,7 @@ proc ::gpg::JoinOptions {optList} {
             return [lindex $optList 0]
         }
         default {
-            return "[join [lrange $optList 0 end-1] ", "], or\
+            return "[join [lrange $optList 0 end-1] {, }], or\
                     [lindex $optList end]"
         }
     }
