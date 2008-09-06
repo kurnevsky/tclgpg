@@ -70,9 +70,7 @@ proc ::gpg::info {args} {
                                  expired expiredkey]
                 }
                 signature-modes {
-                    return [list valid green red key-revoked key-expired \
-                                 signature-expired key-missing crl-missing \
-                                 crl-too-old bad-policy sys-error]
+                    return [list normal detach clear]
                 }
                 attributes {
                     return [list keyid fingerprint algorithm length created \
@@ -215,6 +213,9 @@ proc ::gpg::Exec {token args} {
         done-key  { return [eval [list DoneKey  $token] $newArgs] }
         info-key  { return [eval [list InfoKey  $token] $newArgs] }
         encrypt   { return [eval [list Encrypt  $token] $newArgs] }
+        sign      { return [eval [list Sign     $token] $newArgs] }
+        verify    { return [eval [list Verify   $token] $newArgs] }
+        decrypt   { return [eval [list Decrypt  $token] $newArgs] }
         start-trustitem -
         next-trustitem  -
         done-trustitem  -
@@ -271,6 +272,123 @@ proc ::gpg::Info {token args} {
     return $operations
 }
 
+proc ::gpg::Decrypt {token args} {
+    variable $token
+    upvar 0 $token state
+
+    foreach {key val} $args {
+        switch -- $key {
+            -input { set input $val }
+            -checkstatus { set checkstatus $val }
+        }
+    }
+
+    set name_fd [TempFile]
+    foreach {filename fd} $name_fd break
+
+    puts $fd $input
+    close $fd
+
+    set res [eval [list ExecGPG $token decrypt "" \
+                                --no-tty \
+                                --status-fd 2 \
+                                --logger-fd 2 \
+                                --command-fd 0 \
+                                --no-verbose \
+                                --output - \
+                                --decrypt] \
+                                -- $filename]
+    file delete -force -- $filename
+    return $res
+}
+
+proc ::gpg::Verify {token args} {
+    variable $token
+    upvar 0 $token state
+
+    foreach {key val} $args {
+        switch -- $key {
+            -signature { set signature $val }
+            -input { set input $val }
+        }
+    }
+
+    if {[::info exists input]} {
+        # A signature is detached, so create a temporary file
+        # with a signature.
+        set params {--enable-special-filenames}
+
+        set name_fd [TempFile]
+        foreach {filename fd} $name_fd break
+
+        puts $fd $signature
+        close $fd
+
+        set fnames [list $filename -]
+    } else {
+        set params {}
+        set fnames {}
+        set input $signature
+    }
+
+    set res [eval [list ExecGPG $token verify $input \
+                                --no-tty \
+                                --status-fd 2 \
+                                --logger-fd 2 \
+                                --command-fd 0 \
+                                --no-verbose \
+                                --output - \
+                                --verify] \
+                                $params \
+                                -- $fnames]
+    if {[::info exists filename]} {
+        file delete -force -- $filename
+    }
+    return $res
+}
+
+proc ::gpg::Sign {token args} {
+    variable $token
+    upvar 0 $token state
+
+    set mode normal
+    foreach {key val} $args {
+        switch -- $key {
+            -input { set input $val }
+            -mode { set mode $val }
+        }
+    }
+
+    if {[Get $token -property armor]} {
+        set params {--armor}
+    } else {
+        set params {}
+    }
+
+    switch -- $mode {
+        normal { lappend params --sign }
+        detach { lappend params --detach-sign }
+        clear { lappend params --clearsign }
+    }
+
+    array set tmp {}
+    foreach key [Get $token -property signers] {
+        array unset tmp
+        array set tmp [InfoKey $token -key $key]
+        lappend params -u $tmp(keyid)
+    }
+
+    return [eval [list ExecGPG $token sign $input \
+                               --no-tty \
+                               --status-fd 2 \
+                               --logger-fd 2 \
+                               --command-fd 0 \
+                               --no-verbose \
+                               --output -] \
+                               $params \
+                               --]
+}
+
 proc ::gpg::Encrypt {token args} {
     variable $token
     upvar 0 $token state
@@ -292,6 +410,12 @@ proc ::gpg::Encrypt {token args} {
 
     if {$sign} {
         lappend params --sign
+        array set tmp {}
+        foreach key [Get $token -property signers] {
+            array unset tmp
+            array set tmp [InfoKey $token -key $key]
+            lappend params -u $tmp(keyid)
+        }
     } else {
         lappend params --batch
     }
@@ -300,7 +424,7 @@ proc ::gpg::Encrypt {token args} {
         lappend params -r $name
     }
 
-    return [eval [list ExecGPG $token $input \
+    return [eval [list ExecGPG $token encrypt $input \
                                --no-tty \
                                --status-fd 2 \
                                --logger-fd 2 \
@@ -355,7 +479,7 @@ proc ::gpg::StartKey {token args} {
 
     set state(keystoken) $keystoken
 
-    set gpgOutput [eval [list ExecGPG $token "" \
+    set gpgOutput [eval [list ExecGPG $token list-keys "" \
                            --batch \
                            --no-tty \
                            --status-fd 2 \
@@ -622,7 +746,7 @@ proc ::gpg::Algorithm {code} {
 
 # TODO: Asynchronous processing (non-blocking channel)
 
-proc ::gpg::ExecGPG {token input args} {
+proc ::gpg::ExecGPG {token operation input args} {
     variable gpgExecutable
 
     puts $args
@@ -639,7 +763,7 @@ proc ::gpg::ExecGPG {token input args} {
         }
     }
 
-    if {[string equal $input ""]} {
+    if {[string equal $operation list-keys]} {
         set fd [open |[linsert $args 0 $gpgExecutable] r]
         set data [read $fd]
         puts $data
@@ -659,6 +783,7 @@ proc ::gpg::ExecGPG {token input args} {
         set qList [pipe]
     }
     foreach {qRead qWrite} $qList break
+    #fconfigure $qRead -blocking 0 -buffering none
 
     # Redirect stdout and stderr to pipes
 
@@ -669,36 +794,60 @@ proc ::gpg::ExecGPG {token input args} {
     close $pWrite
     close $qWrite
 
-    while {[gets $qRead line] >= 0} {
-        puts $line
-        set fields [split $line]
+    switch -- $operation {
+        encrypt -
+        decrypt -
+        sign {
+            while {[gets $qRead line] >= 0} {
+                puts $line
+                set fields [split $line]
 
-        if {![string equal [lindex $fields 0] "\[GNUPG:\]"]} continue
+                if {![string equal [lindex $fields 0] "\[GNUPG:\]"]} continue
 
-        switch -- [lindex $fields 1] {
-            BEGIN_ENCRYPTION { break }
-            BEGIN_SIGNING { break }
-            NEED_PASSPHRASE {
-                puts $fd [eval [Get $token -property passphrase-callback] \
-                               [lrange $fields 2 end]]
+                switch -- [lindex $fields 1] {
+                    BEGIN_ENCRYPTION { break }
+                    BEGIN_SIGNING { break }
+                    USERID_HINT {
+                        # TODO
+                    }
+                    NEED_PASSPHRASE {
+                        puts $fd [eval [Get $token -property passphrase-callback] \
+                                       [lrange $fields 2 end]]
+                    }
+                }
             }
+
+            if {![string equal $input ""]} {
+                puts $fd $input
+            }
+            catch {close $fd}
+
+            set data [read $pRead]
+        }
+        verify {
+            puts $fd $input
+            catch {close $fd}
+
+            while {[gets $qRead line] >= 0} {
+                puts $line
+                set fields [split $line]
+
+                if {![string equal [lindex $fields 0] "\[GNUPG:\]"]} continue
+
+                switch -- [lindex $fields 1] {
+                    #TODO {}
+                }
+            }
+
+            set data "" ; #TODO
         }
     }
-
-    puts $fd $input
-    catch {close $fd}
-
-    set control [read $qRead]
-    puts $control
-
-
-    set data [read $pRead]
-    puts $data
 
     # If gpg returns nonzero status or writes to stderr, close raises
     # an error. So, the catch is necessary.
     # TODO: Process the error
 
+    catch {close $qRead}
     catch {close $pRead}
     return $data
 }
@@ -913,6 +1062,58 @@ proc ::gpg::JoinOptions {optList} {
             return "[join [lrange $optList 0 end-1] {, }], or\
                     [lindex $optList end]"
         }
+    }
+}
+
+
+proc TempFile {} {
+    # Code is borrowed from http://wiki.tcl.tk/772
+    switch $::tcl_platform(platform) {
+        unix {
+            set tmpdir /tmp
+        } macintosh {
+            set tmpdir $::env(TRASH_FOLDER)
+        } default {
+            set tmpdir [pwd]
+            catch {set tmpdir $::env(TMP)}
+            catch {set tmpdir $::env(TEMP)}
+        }
+    }
+
+    if {![file writable $tmpdir]} {
+        return -code error \
+               [format "temporary directory \"%s\" is not writable" $tmpdir]
+    }
+
+    set chars "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    set nrand_chars 10
+    set maxtries 10
+    set access [list RDWR CREAT EXCL TRUNC]
+    set permission 0600
+    set fd ""
+    set mypid [pid]
+
+    for {set i 0} {$i < $maxtries} {incr i} {
+        set newname ""
+        for {set j 0} {$j < $nrand_chars} {incr j} {
+            append newname \
+                   [string index $chars \
+                           [expr {([clock clicks] ^ $mypid) % 62}]]
+        }
+        set newname [file join $tmpdir $newname]
+
+        if {![file exists $newname]} {
+            if {![catch {open $newname $access $permission} fd]} {
+                return [list $newname $fd]
+            }
+        }
+    }
+    if {[string equal $fd ""]} {
+        return -code error \
+               "failed to find an unused temporary file name"
+    } else {
+        return -code error \
+               [format "failed to open a temporary file: %s" $fd]
     }
 }
 

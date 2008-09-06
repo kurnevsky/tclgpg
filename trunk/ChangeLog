@@ -1,3 +1,9 @@
+2008-09-06  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Implemented gpg calls for message signing, decryption
+	  and signature verification. Results for signature verification
+	  aren't ready yet.
+
 2008-09-05  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Implemented message encryption with optional signing.
