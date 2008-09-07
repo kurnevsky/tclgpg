@@ -316,9 +316,10 @@ proc ::gpg::Verify {token args} {
     }
 
     if {[::info exists input]} {
+        set op dverify
         # A signature is detached, so create a temporary file
         # with a signature.
-        set params {--enable-special-filenames}
+        set params {--enable-special-filenames --verify}
 
         set name_fd [TempFile]
         foreach {filename fd} $name_fd break
@@ -328,19 +329,19 @@ proc ::gpg::Verify {token args} {
 
         set fnames [list $filename -]
     } else {
+        set op verify
         set params {}
         set fnames {}
         set input $signature
     }
 
-    set res [eval [list ExecGPG $token verify $input \
+    set res [eval [list ExecGPG $token $op $input \
                                 --no-tty \
                                 --status-fd 2 \
                                 --logger-fd 2 \
                                 --command-fd 0 \
                                 --no-verbose \
-                                --output - \
-                                --verify] \
+                                --output -] \
                                 $params \
                                 -- $fnames]
     if {[::info exists filename]} {
@@ -828,7 +829,8 @@ proc ::gpg::ExecGPG {token operation input args} {
 
             set data [read $pRead]
         }
-        verify {
+        verify -
+        dverify {
             # Here $input contains either a signature, or a signed material
             # if a signature is detached.
             puts $fd $input
@@ -965,16 +967,29 @@ proc ::gpg::ExecGPG {token operation input args} {
                 lappend statuses $sig(status)
             }
             set statuses [lsort -unique $statuses]
-            if {[llength $statuses] == 1} {
-                # All signatures have the same status
-                set status [lindex $statuses 0]
-            } else {
-                # There are different statuses
-                set ststus diff
+            switch -- [llength $statuses] {
+                0 {
+                    set status nosig
+                }
+                1 {
+                    # All signatures have the same status
+                    set status [lindex $statuses 0]
+                }
+                default {
+                    # There are different statuses
+                    set ststus diff
+                }
             }
 
-            # TODO plaintext attribute
-            set data [list status $status signatures $signatures]
+            if {[string equal $operation verify] && \
+                    ![string equal $status nosig]} {
+                set plaintext [read $pRead]
+                set data [list plaintext $plaintext]
+            } else {
+                set data {}
+            }
+
+            lappend data status $status signatures $signatures
         }
     }
 

@@ -4,6 +4,8 @@
 	  catching errors from gpg and returning plaintext attribute for
 	  signatures which include the signed text).
 
+	* tclgpg.tcl: Return plaintext attribute for non-detached signatures.
+
 2008-09-06  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Implemented gpg calls for message signing, decryption
