@@ -1,3 +1,9 @@
+2008-09-07  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Almost finished signature verification code (except
+	  catching errors from gpg and returning plaintext attribute for
+	  signatures which include the signed text).
+
 2008-09-06  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Implemented gpg calls for message signing, decryption
