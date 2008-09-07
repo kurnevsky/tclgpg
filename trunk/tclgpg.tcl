@@ -45,6 +45,8 @@ namespace eval ::gpg {
                               progress-callback idle-callback signers]
 
     variable validities [list unknown undefined never marginal full ultimate]
+
+    variable debug 0
 }
 
 # ::gpg::info --
@@ -67,7 +69,7 @@ proc ::gpg::info {args} {
                 }
                 signature-status {
                     return [list none good bad nokey nosig error diff \
-                                 expired expiredkey]
+                                 expired expiredkey revokedkey]
                 }
                 signature-modes {
                     return [list normal detach clear]
@@ -749,7 +751,7 @@ proc ::gpg::Algorithm {code} {
 proc ::gpg::ExecGPG {token operation input args} {
     variable gpgExecutable
 
-    puts $args
+    Debug 1 $args
 
     # Raise an error if there are dangerous arguments
 
@@ -765,8 +767,9 @@ proc ::gpg::ExecGPG {token operation input args} {
 
     if {[string equal $operation list-keys]} {
         set fd [open |[linsert $args 0 $gpgExecutable] r]
+        fconfigure $fd -translation binary
         set data [read $fd]
-        puts $data
+        Debug 2 $data
         catch {close $fd}
         return $data
     }
@@ -778,19 +781,20 @@ proc ::gpg::ExecGPG {token operation input args} {
         set pList [pipe]
     }
     foreach {pRead pWrite} $pList break
+    fconfigure $pRead -translation binary
 
     if {[catch {chan pipe} qList]} {
         set qList [pipe]
     }
     foreach {qRead qWrite} $qList break
-    #fconfigure $qRead -blocking 0 -buffering none
+    fconfigure $qRead -translation binary
 
     # Redirect stdout and stderr to pipes
 
     lappend args >@ $pWrite 2>@ $qWrite
 
     set fd [open |[linsert $args 0 $gpgExecutable] w]
-    fconfigure $fd -buffering none
+    fconfigure $fd -translation binary -buffering none
     close $pWrite
     close $qWrite
 
@@ -799,7 +803,7 @@ proc ::gpg::ExecGPG {token operation input args} {
         decrypt -
         sign {
             while {[gets $qRead line] >= 0} {
-                puts $line
+                Debug 2 $line
                 set fields [split $line]
 
                 if {![string equal [lindex $fields 0] "\[GNUPG:\]"]} continue
@@ -825,21 +829,152 @@ proc ::gpg::ExecGPG {token operation input args} {
             set data [read $pRead]
         }
         verify {
+            # Here $input contains either a signature, or a signed material
+            # if a signature is detached.
             puts $fd $input
             catch {close $fd}
 
+            array unset sig
+            array set sig [list status nosig validity unknown summary {}]
+
+            set signatures {}
+
             while {[gets $qRead line] >= 0} {
-                puts $line
+                Debug 2 $line
                 set fields [split $line]
 
                 if {![string equal [lindex $fields 0] "\[GNUPG:\]"]} continue
 
                 switch -- [lindex $fields 1] {
-                    #TODO {}
+                    NEWSIG {}
+                    GOODSIG {
+                        set sig(status) good
+                        set sig(keyid) [lindex $fields 2]
+                        set sig(uid) [join [lrange $fields 3 end]]
+                    }
+                    EXPSIG {
+                        set sig(status) expired
+                        set sig(keyid) [lindex $fields 2]
+                        set sig(uid) [join [lrange $fields 3 end]]
+                    }
+                    EXPKEYSIG {
+                        set sig(status) expiredkey
+                        set sig(keyid) [lindex $fields 2]
+                        set sig(uid) [join [lrange $fields 3 end]]
+                    }
+                    REVKEYSIG {
+                        set sig(status) revokedkey
+                        set sig(keyid) [lindex $fields 2]
+                        set sig(uid) [join [lrange $fields 3 end]]
+                    }
+                    BADSIG {
+                        set sig(status) bad
+                        lappend sig(summary) red
+                        set sig(keyid) [lindex $fields 2]
+                        set sig(uid) [join [lrange $fields 3 end]]
+                    }
+                    ERRSIG {
+                        switch -- [lindex $fields 7] {
+                            9 {
+                                set sig(status) nokey
+                            }
+                            default {
+                                set sig(status) error
+                            }
+                        }
+                        set sig(keyid) [lindex $fields 2]
+                    }
+                    VALIDSIG {
+                        set sig(fingerprint) [lindex $fields 2]
+                        set sig(created) [lindex $fields 4]
+                        if {[lindex $fields 5] != 0} {
+                            set sig(expires) [lindex $fields 5]
+                        }
+                        set sig(key) [lindex $fields 11]
+                    }
+                    SIG_ID {}
+                    NODATA -
+                    UNEXPECTED {
+                        set sig(status) nosig
+                        lappend signatures [array get sig]
+                        array unset sig
+                        array set sig [list status nosig validity unknown \
+                                            summary {}]
+                    }
+                    KEYEXPIRED {
+                        set sig(status) expiredkey
+                    }
+                    KEYREVOKED {
+                        set sig(status) revokedkey
+                    }
+                    TRUST_UNDEFINED {
+                        set sig(validity) unknown
+                    }
+                    TRUST_NEVER {
+                        set sig(validity) never
+                        switch -- $sig(status) {
+                            good -
+                            expired -
+                            expiredkey {
+                                lappend sig(summary) red
+                            }
+                        }
+                    }
+                    TRUST_MARGINAL {
+                        set sig(validity) marginal
+                    }
+                    TRUST_FULLY -
+                    TRUST_ULTIMATE {
+                        set sig(validity) full
+                        switch -- $sig(status) {
+                            good -
+                            expired -
+                            expiredkey {
+                                lappend sig(summary) green
+                            }
+                        }
+                    }
+                }
+
+                switch -- [lindex $fields 1] {
+                    BADSIG -
+                    ERRSIG -
+                    TRUST_UNDEFINED -
+                    TRUST_NEVER -
+                    TRUST_MARGINAL -
+                    TRUST_FULLY -
+                    TRUST_ULTIMATE {
+                        # Finish a signature
+                        if {[string equal $sig(status) good] && \
+                                [llength $sig(summary)] == 1 && \
+                                [string equal [lindex $sig(summary) 0] green]} {
+                            lappend sig(summary) valid
+                        }
+                        lappend signatures [array get sig]
+                        array unset sig
+                        array set sig [list status nosig validity unknown \
+                                            summary {}]
+                    }
                 }
             }
 
-            set data "" ; #TODO
+            set statuses {}
+            foreach s $signatures {
+                array unset sig
+                array set sig $s
+                lappend statuses $sig(status)
+            }
+            set statuses [lsort -unique $statuses]
+            if {[llength $statuses] == 1} {
+                # All signatures have the same status
+                set status [lindex $statuses 0]
+            } else {
+                # There are different statuses
+                set ststus diff
+            }
+
+            # TODO plaintext attribute
+            set data [list status $status signatures $signatures]
         }
     }
 
@@ -1066,7 +1201,7 @@ proc ::gpg::JoinOptions {optList} {
 }
 
 
-proc TempFile {} {
+proc ::gpg::TempFile {} {
     # Code is borrowed from http://wiki.tcl.tk/772
     switch $::tcl_platform(platform) {
         unix {
@@ -1104,6 +1239,7 @@ proc TempFile {} {
 
         if {![file exists $newname]} {
             if {![catch {open $newname $access $permission} fd]} {
+                fconfigure $fd -translation binary
                 return [list $newname $fd]
             }
         }
@@ -1115,6 +1251,31 @@ proc TempFile {} {
         return -code error \
                [format "failed to open a temporary file: %s" $fd]
     }
+}
+
+# ::gpg::Debug --
+#
+#       Prints debug information.
+#
+# Arguments:
+#       level   A debug level.
+#       msg     A debug message.
+#
+# Result:
+#       An empty string.
+#
+# Side effects:
+#       A debug message is printed to the console if the value of
+#       ::gpg::debug variable is not less than num.
+
+proc ::gpg::Debug {level msg} {
+    variable debug
+
+    if {$debug >= $level} {
+        puts "[lindex [::info level -1] 0]: $msg"
+    }
+
+    return
 }
 
 # vim:ts=8:sw=4:sts=4:et
