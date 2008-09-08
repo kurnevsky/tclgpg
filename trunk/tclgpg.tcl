@@ -248,8 +248,10 @@ proc ::gpg::Get {token args} {
 
     if {![::info exists opts(-property)]} {
         return [linsert $properties end last-op-info]
-    } else {
+    } elseif {[::info exists state($opts(-property))]} {
         return $state($opts(-property))
+    } else {
+        return ""
     }
 }
 
@@ -362,7 +364,8 @@ proc ::gpg::Sign {token args} {
         }
     }
 
-    if {[Get $token -property armor]} {
+    set armor [Get $token -property armor]
+    if {![string equal $armor ""] && $armor} {
         set params {--armor}
     } else {
         set params {}
@@ -405,7 +408,8 @@ proc ::gpg::Encrypt {token args} {
         }
     }
 
-    if {[Get $token -property armor]} {
+    set armor [Get $token -property armor]
+    if {![string equal $armor ""] && $armor} {
         set params {--armor}
     } else {
         set params {}
@@ -419,12 +423,24 @@ proc ::gpg::Encrypt {token args} {
             array set tmp [InfoKey $token -key $key]
             lappend params -u $tmp(keyid)
         }
-    } else {
-        lappend params --batch
     }
 
-    foreach name [$recipients -operation list] {
-        lappend params -r $name
+    if {[::info exists recipients]} {
+        lappend params --encrypt
+
+        if {!$sign} {
+            lappend params --batch
+        }
+
+        foreach name [$recipients -operation list] {
+            lappend params -r $name
+        }
+
+        if {[$recipients -operation count] == 0} {
+            return -code error "No recipents in token"
+        }
+    } else {
+        lappend params --symmetric
     }
 
     return [eval [list ExecGPG $token encrypt $input \
@@ -433,7 +449,6 @@ proc ::gpg::Encrypt {token args} {
                                --logger-fd 2 \
                                --command-fd 0 \
                                --no-verbose \
-                               --encrypt \
                                --output -] \
                                $params \
                                --]
@@ -813,11 +828,30 @@ proc ::gpg::ExecGPG {token operation input args} {
                     BEGIN_ENCRYPTION { break }
                     BEGIN_SIGNING { break }
                     USERID_HINT {
-                        # TODO
+                        set userid_hint [join [lrange $fields 2 end]]
                     }
                     NEED_PASSPHRASE {
-                        puts $fd [eval [Get $token -property passphrase-callback] \
-                                       [lrange $fields 2 end]]
+                        if {![::info exists hint]} {
+                            set hint ENTER
+                        } else {
+                            set hint TRY_AGAIN
+                        }
+                        set pcb [Get $token -property passphrase-callback]
+                        if {[string equal $pcb ""]} {
+                            return -code error "No passphrase"
+                        }
+                        puts $fd [eval $pcb \
+                             "$hint\n$userid_hint\n[join [lrange $fields 2 end] { }]"]
+                    }
+                    KEYEXPIRED {
+                        return -code error "Key expired"
+                    }
+                    NEED_PASSPHRASE_SYM {
+                        set pcb [Get $token -property passphrase-callback]
+                        if {[string equal $pcb ""]} {
+                            return -code error "No passphrase"
+                        }
+                        puts $fd [eval $pcb "ENTER"]
                     }
                 }
             }
@@ -983,6 +1017,10 @@ proc ::gpg::ExecGPG {token operation input args} {
 
             if {[string equal $operation verify] && \
                     ![string equal $status nosig]} {
+
+                # "verify" means non-detached signature, so gpg reports the
+                # signed message to stdout.
+
                 set plaintext [read $pRead]
                 set data [list plaintext $plaintext]
             } else {
