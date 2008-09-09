@@ -1,0 +1,129 @@
+[comment {-*- tcl -*- doctools manpage}]
+[comment {$Id$}]
+[manpage_begin gpg n 1.0]
+[copyright {2008 Sergei Golovan <sgolovan@nes.ru>, Antoni Grzymala <antoni@chopin.edu.pl>}]
+[moddesc {Tcl interface to GNU Privacy Guard}]
+[titledesc {Tcl Interfcae to GnuPG}]
+[require Tcl 8.3]
+[require Tclx]
+[require gpg 1.0]
+[description]
+[para]
+
+This is a Tcl interface to GNU Privacy Guard with interface similar to
+TclGPGME.
+
+[section "COMMANDS"]
+
+[list_begin definitions]
+[call [cmd "::gpg::context"]]
+
+Create a new GPG context token.
+
+[call [cmd "\$token"] \
+        [arg "-operation set"] \
+        [arg "-property property"] \
+	[opt [arg "-value value"]]]
+
+Set a specified property.
+
+[call [cmd "\$token"] \
+        [arg "-operation get"] \
+        [arg "-property property"]]
+
+Get a specified property.
+
+[call [cmd "\$token"] \
+        [arg "-operation start-key"] \
+        [opt [arg "-patterns patterns"]] \
+	[opt [arg "-secretonly boolean"]]]
+
+Start searching for keys which match any of a specified patterns in the patterns
+list [arg patterns].
+
+[call [cmd "\$token"] \
+        [arg "-operation next-key"]]
+
+Return the next key token in a search list.
+
+[call [cmd "\$token"] \
+        [arg "-operation done-key"]]
+
+Stop searching for keys.
+
+[call [cmd "\$token"] \
+        [arg "-operation info-key"] \
+	[arg "-key keytoken"]]
+
+Return a serialized array of key properties.
+
+[call [cmd "\$token"] \
+        [arg "-operation encrypt"] \
+	[arg "-input input"] \
+	[opt [arg "-recipients recipients"]] \
+	[opt [arg "-sign boolean"]]]
+
+Encrypt message (using either symmetric or asymmetric algorithm).
+
+[call [cmd "\$token"] \
+        [arg "-operation decrypt"] \
+	[arg "-input input"] \
+	[opt [arg "-checkstatus boolean"]]]
+
+Decrypt message.
+
+[call [cmd "\$token"] \
+        [arg "-operation sign"] \
+	[arg "-input input"] \
+	[opt [arg "-mode mode"]]]
+
+Sign message.
+
+[call [cmd "\$token"] \
+        [arg "-operation verify"] \
+	[arg "-signature signature"] \
+	[opt [arg "-input input"]]]
+
+Verify signature.
+
+[call [cmd "::gpg::recipient"]]
+
+Create recipients token.
+
+[call [cmd "\$recipient"] \
+        [arg "-operation add"] \
+	[arg "-name name"] \
+	[opt [arg "-validity valid"]]]
+
+Add name to a recipient token.
+
+[call [cmd "\$recipient"] \
+        [arg "-operation count"]]
+
+Return a number of recipients in a recipient token.
+
+[call [cmd "\$recipient"] \
+        [arg "-operation list"]]
+
+Return a list of recipients in a recipient token.
+
+[list_end]
+
+[section EXAMPLES]
+
+Encrypt the word Hello using a symmetric encryption using
+passphrase "abcdefgh":
+
+[comment {Spaces after trailing \ are essential}]
+[example {
+set ctx [::gpg::context]
+$ctx -operation set passphrase-callback {puts abcdefgh}
+$ctx -operation encrypt -input Hello
+}]
+
+[section "AUTHORS"]
+Sergei Golovan
+Antoni Grzymala
+
+[keywords Tcl GnuPG]
+[manpage_end]
