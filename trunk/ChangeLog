@@ -1,4 +1,8 @@
-2008-09-08  Sergei Golovan  <sgolovan@nes.ru>
+2008-09-10  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Added support for operation last-op-info.
+
+2008-09-09  Sergei Golovan  <sgolovan@nes.ru>
 
 	* gpg.man: Added a very preliminary manual page.
 

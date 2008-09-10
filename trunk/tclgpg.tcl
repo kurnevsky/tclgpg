@@ -205,19 +205,19 @@ proc ::gpg::Exec {token args} {
     }
 
     switch -- $op {
-        info      { return [eval [list Info     $token] $newArgs] }
-        cancel    { return [eval [list Cancel   $token] $newArgs] }
-        wait      { return [eval [list Wait     $token] $newArgs] }
-        get       { return [eval [list Get      $token] $newArgs] }
-        set       { return [eval [list Set      $token] $newArgs] }
-        start-key { return [eval [list StartKey $token] $newArgs] }
-        next-key  { return [eval [list NextKey  $token] $newArgs] }
-        done-key  { return [eval [list DoneKey  $token] $newArgs] }
-        info-key  { return [eval [list InfoKey  $token] $newArgs] }
-        encrypt   { return [eval [list Encrypt  $token] $newArgs] }
-        sign      { return [eval [list Sign     $token] $newArgs] }
-        verify    { return [eval [list Verify   $token] $newArgs] }
-        decrypt   { return [eval [list Decrypt  $token] $newArgs] }
+        info      { set res [eval [list Info     $token] $newArgs] }
+        cancel    { set res [eval [list Cancel   $token] $newArgs] }
+        wait      { set res [eval [list Wait     $token] $newArgs] }
+        get       { set res [eval [list Get      $token] $newArgs] }
+        set       { set res [eval [list Set      $token] $newArgs] }
+        start-key { set res [eval [list StartKey $token] $newArgs] }
+        next-key  { set res [eval [list NextKey  $token] $newArgs] }
+        done-key  { set res [eval [list DoneKey  $token] $newArgs] }
+        info-key  { set res [eval [list InfoKey  $token] $newArgs] }
+        encrypt   { set res [eval [list Encrypt  $token] $newArgs] }
+        sign      { set res [eval [list Sign     $token] $newArgs] }
+        verify    { set res [eval [list Verify   $token] $newArgs] }
+        decrypt   { set res [eval [list Decrypt  $token] $newArgs] }
         start-trustitem -
         next-trustitem  -
         done-trustitem  -
@@ -229,6 +229,9 @@ proc ::gpg::Exec {token args} {
             return -code error [format "Illegal operation \"%s\"" $op]
         }
     }
+
+    set state(last-op-info) $op
+    return $res
 }
 
 proc ::gpg::Cancel {token args} {
@@ -244,14 +247,20 @@ proc ::gpg::Get {token args} {
     variable $token
     upvar 0 $token state
 
+    set gproperties [linsert $properties end last-op-info]
+
     array set opts $args
 
     if {![::info exists opts(-property)]} {
-        return [linsert $properties end last-op-info]
-    } elseif {[::info exists state($opts(-property))]} {
-        return $state($opts(-property))
+        return $gproperties
+    } elseif {[lsearch -exact $gproperties $opts(-property)] >= 0} {
+        if {[::info exists state($opts(-property))]} {
+            return $state($opts(-property))
+        } else {
+            return ""
+        }
     } else {
-        return ""
+        return -code error [format "unknown property \"%s\"" $opts(-property)]
     }
 }
 
@@ -264,9 +273,11 @@ proc ::gpg::Set {token args} {
 
     if {![::info exists opts(-property)]} {
         return $properties
-    } else {
+    } elseif {[lsearch -exact $properties $opts(-property)] >= 0} {
         set state($opts(-property)) $opts(-value)
         return
+    } else {
+        return -code error [format "unknown property \"%s\"" $opts(-property)]
     }
 }
 
