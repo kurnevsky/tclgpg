@@ -9,6 +9,8 @@
 #
 # $Id$
 
+package require Tcl 8.4
+
 if {![package vsatisfies [package require Tcl] 8.6]} {
     package require Tclx
 }
@@ -46,7 +48,7 @@ namespace eval ::gpg {
 
     variable validities [list unknown undefined never marginal full ultimate]
 
-    variable debug 0
+    variable debug 2
 }
 
 # ::gpg::info --
@@ -852,7 +854,8 @@ proc ::gpg::ExecGPG {token operation input args} {
                             return -code error "No passphrase"
                         }
                         puts $fd [eval $pcb \
-                             "$hint\n$userid_hint\n[join [lrange $fields 2 end] { }]"]
+                             [list [list token $token \
+                                   description "$hint\n$userid_hint\n[join [lrange $fields 2 end] { }]"]]]
                     }
                     KEYEXPIRED {
                         return -code error "Key expired"
@@ -862,7 +865,7 @@ proc ::gpg::ExecGPG {token operation input args} {
                         if {[string equal $pcb ""]} {
                             return -code error "No passphrase"
                         }
-                        puts $fd [eval $pcb "ENTER"]
+                        puts $fd [eval $pcb [list [list token $token description "ENTER"]]]
                     }
                 }
             }
