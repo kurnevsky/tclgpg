@@ -1,3 +1,12 @@
+2008-09-11  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Added requirement for Tcl 8.4 which is required for
+	  tracing commands. Changed default debug level to 2 which is more
+	  appropriate for pre-alpha stage. Call passphrase callback with
+	  serialized array argument similar to original TclGPGME.
+
+	* gpg.man: Fixed Tcl requirement.
+
 2008-09-10  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Added support for operation last-op-info.
