@@ -895,7 +895,7 @@ proc ::gpg::ExecGPG {token operation input args} {
         dverify {
             # Here $input contains either a signature, or a signed material
             # if a signature is detached.
-            puts $fd $input
+            puts -nonewline $fd $input
             catch {close $fd}
 
             array unset sig
