@@ -48,6 +48,9 @@ namespace eval ::gpg {
 
     variable validities [list unknown undefined never marginal full ultimate]
 
+    # Variable to store public keys
+    variable keys
+
     variable debug 2
 }
 
@@ -163,14 +166,6 @@ proc ::gpg::context {} {
 proc ::gpg::Free {token args} {
     variable $token
     upvar 0 $token state
-
-    if {[::info exists state(keystoken)]} {
-        set keystoken $state(keystoken)
-        variable $keystoken
-        upvar 0 $keystoken keys
-        unset keys
-        unset state(keystoken)
-    }
 
     catch {unset state}
     return
@@ -362,6 +357,7 @@ proc ::gpg::Verify {token args} {
     if {[::info exists filename]} {
         file delete -force -- $filename
     }
+    Debug 2 $res
     return $res
 }
 
@@ -471,7 +467,7 @@ proc ::gpg::StartKey {token args} {
     variable $token
     upvar 0 $token state
 
-    if {[::info exists state(searchid)]} {
+    if {[::info exists state(keyidx)]} {
         return -code error \
                "already doing a key listing, end that one first"
     }
@@ -501,56 +497,55 @@ proc ::gpg::StartKey {token args} {
         }
     }
 
-    set keystoken [namespace current]::keys$state(id)
-    variable $keystoken
-    upvar 0 $keystoken keys
-
-    catch {unset keys}
-    array set keys {}
-
-    set state(keystoken) $keystoken
-
-    set gpgOutput [eval [list ExecGPG $token list-keys "" \
-                           --batch \
-                           --no-tty \
-                           --status-fd 2 \
-                           --with-colons \
-                           --fixed-list-mode \
-                           --with-fingerprint \
-                           --with-fingerprint \
-                           $operation --] $patterns]
-
-    Parse keys $gpgOutput
-    set state(searchid) [array startsearch $keystoken]
+    set state(keylist) [ListKeys $token $operation $patterns]
+    set state(keyidx) -1
 
     return
+}
+
+proc ::gpg::ListKeys {token operation patterns} {
+    variable $token
+    upvar 0 $token state
+
+    set gpgOutput [eval [list ExecGPG $token list-keys "" \
+                              --batch \
+                              --no-tty \
+                              --status-fd 2 \
+                              --with-colons \
+                              --fixed-list-mode \
+                              --with-fingerprint \
+                              --with-fingerprint \
+                              $operation --] $patterns]
+
+    return [Parse $token $gpgOutput]
 }
 
 proc ::gpg::NextKey {token args} {
     variable $token
     upvar 0 $token state
 
-    if {![::info exists state(searchid)]} {
+    if {![::info exists state(keyidx)]} {
         return -code error "not doing a key listing"
     }
 
-    return [array nextelement $state(keystoken) $state(searchid)]
+    return [lindex $state(keylist) [incr state(keyidx)]]
 }
 
 proc ::gpg::DoneKey {token args} {
     variable $token
     upvar 0 $token state
 
-    if {![::info exists state(searchid)]} {
+    if {![::info exists state(keyidx)]} {
         return -code error "not doing a key listing"
     }
 
-    array donesearch $state(keystoken) $state(searchid)
-    unset state(searchid)
+    unset state(keylist)
+    unset state(keyidx)
     return
 }
 
 proc ::gpg::InfoKey {token args} {
+    variable keys
     variable $token
     upvar 0 $token state
 
@@ -567,9 +562,6 @@ proc ::gpg::InfoKey {token args} {
         }
     }
 
-    variable $state(keystoken)
-    upvar 0 $state(keystoken) keys
-
     if {[::info exists keys($fingerprint)]} {
         return $keys($fingerprint)
     } else {
@@ -577,10 +569,14 @@ proc ::gpg::InfoKey {token args} {
     }
 }
 
-proc ::gpg::Parse {keysVar gpgOutput} {
-    upvar 1 $keysVar keys
+proc ::gpg::Parse {token gpgOutput} {
+    variable keys
+    variable $token
+    upvar 0 $token state
 
+    set res {}
     set key {}
+    set st ""
     foreach line [split $gpgOutput "\n"] {
         set fields [split $line ":"]
         switch -- [lindex $fields 0] {
@@ -589,9 +585,11 @@ proc ::gpg::Parse {keysVar gpgOutput} {
             crt -
             crs {
                 # Store the current key and start a new one
+                set st key
                 array set tmp $key
                 if {[::info exists tmp(fingerprint)]} {
                     set keys($tmp(fingerprint)) $key
+                    lappend res $tmp(fingerprint)
                 }
                 array unset tmp
                 set key {}
@@ -599,24 +597,26 @@ proc ::gpg::Parse {keysVar gpgOutput} {
             sub -
             ssb {
                 # Start a new subkey
+                set st subkey
             }
             sig {
                 # Signature
             }
         }
-        set key [concat $key [ParseRecord $fields]]
+        set key [concat $key [ParseRecord $st $fields]]
     }
 
     # Store the last key
     array set tmp $key
     if {[::info exists tmp(fingerprint)]} {
         set keys($tmp(fingerprint)) $key
+        lappend res $tmp(fingerprint)
     }
 
-    return
+    return $res
 }
 
-proc ::gpg::ParseRecord {fields} {
+proc ::gpg::ParseRecord {state fields} {
     switch -- [lindex $fields 0] {
 	pub -
 	sec -
@@ -671,8 +671,16 @@ proc ::gpg::ParseRecord {fields} {
         }
 	fpr {
             # fingerprint: (fingerprint is in field 10)
-            set fingerprint [lindex $fields 9]
-            return [list fingerprint $fingerprint]
+            switch -- $state {
+                key {
+                    set fingerprint [lindex $fields 9]
+                    return [list fingerprint $fingerprint]
+                }
+                subkey {
+                    # TODO
+                    return {}
+                }
+            }
         }
 	pkd {
             # public key data (special field format)
@@ -779,6 +787,7 @@ proc ::gpg::Algorithm {code} {
 
 proc ::gpg::ExecGPG {token operation input args} {
     variable gpgExecutable
+    variable keys
 
     Debug 1 $args
 
@@ -853,9 +862,13 @@ proc ::gpg::ExecGPG {token operation input args} {
                         if {[string equal $pcb ""]} {
                             return -code error "No passphrase"
                         }
-                        puts $fd [eval $pcb \
-                             [list [list token $token \
-                                   description "$hint\n$userid_hint\n[join [lrange $fields 2 end] { }]"]]]
+                        set desc \
+                            [join [list $hint $userid_hint \
+                                        [join [lrange $fields 2 end] " "]] \
+                                  "\n"]
+                        Debug 2 $desc
+                        puts $fd [eval $pcb [list [list token $token \
+                                                        description $desc]]]
                     }
                     KEYEXPIRED {
                         return -code error "Key expired"
@@ -865,7 +878,8 @@ proc ::gpg::ExecGPG {token operation input args} {
                         if {[string equal $pcb ""]} {
                             return -code error "No passphrase"
                         }
-                        puts $fd [eval $pcb [list [list token $token description "ENTER"]]]
+                        puts $fd [eval $pcb [list [list token $token \
+                                                        description ENTER]]]
                     }
                 }
             }
@@ -941,6 +955,9 @@ proc ::gpg::ExecGPG {token operation input args} {
                             set sig(expires) [lindex $fields 5]
                         }
                         set sig(key) [lindex $fields 11]
+                        if {![::info exists keys($sig(key))]} {
+                            ListKeys $token --list-keys $sig(key)
+                        }
                     }
                     SIG_ID {}
                     NODATA -

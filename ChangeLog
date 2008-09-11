@@ -7,6 +7,11 @@
 
 	* gpg.man: Fixed Tcl requirement.
 
+	* tclgpg.tcl: Store known keys in a global array available for all
+	  contexts. Redesigned key traversing from arrays to lists and use
+	  global array with stored keys. Ask gpg for a key if it is unknown at
+	  the moment of signature verification.
+
 2008-09-10  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Added support for operation last-op-info.
