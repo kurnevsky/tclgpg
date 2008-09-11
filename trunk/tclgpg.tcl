@@ -885,7 +885,7 @@ proc ::gpg::ExecGPG {token operation input args} {
             }
 
             if {![string equal $input ""]} {
-                puts $fd $input
+                puts -nonewline $fd $input
             }
             catch {close $fd}
 

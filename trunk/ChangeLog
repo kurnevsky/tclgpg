@@ -1,7 +1,7 @@
 2008-09-12  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed verifying of detached signature (removed extra LF
-	  from the end of a signed input).
+	  from the end of a signed input). The same for signing.
 
 2008-09-11  Sergei Golovan  <sgolovan@nes.ru>
 
