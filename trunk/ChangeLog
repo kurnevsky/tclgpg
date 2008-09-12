@@ -3,6 +3,12 @@
 	* tclgpg.tcl: Fixed verifying of detached signature (removed extra LF
 	  from the end of a signed input). The same for signing.
 
+	* tclgpg.tcl: Removed trailing LF from temporary files contents
+	  (detached signature and encrypted message). Return serialized array
+	  when dectypting (signature status isn't supported yet). Turn always
+	  trust mode on when all recipients are added with full or ultimate
+	  validity.
+
 2008-09-11  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Added requirement for Tcl 8.4 which is required for

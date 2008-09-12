@@ -298,7 +298,7 @@ proc ::gpg::Decrypt {token args} {
     set name_fd [TempFile]
     foreach {filename fd} $name_fd break
 
-    puts $fd $input
+    puts -nonewline $fd $input
     close $fd
 
     set res [eval [list ExecGPG $token decrypt "" \
@@ -334,7 +334,7 @@ proc ::gpg::Verify {token args} {
         set name_fd [TempFile]
         foreach {filename fd} $name_fd break
 
-        puts $fd $signature
+        puts -nonewline $fd $signature
         close $fd
 
         set fnames [list $filename -]
@@ -435,18 +435,31 @@ proc ::gpg::Encrypt {token args} {
     }
 
     if {[::info exists recipients]} {
+        if {[RecipientCount $recipients] == 0} {
+            return -code error "No recipents in token"
+        }
+
         lappend params --encrypt
 
         if {!$sign} {
             lappend params --batch
         }
 
-        foreach name [$recipients -operation list] {
-            lappend params -r $name
+        set trust {--trust-model always}
+        foreach name_trust [RecipientFullList $recipients] {
+            switch -- [lindex $name_trust 1] {
+                ultimate -
+                full {}
+                default {
+                    set trust {}
+                }
+            }
         }
 
-        if {[$recipients -operation count] == 0} {
-            return -code error "No recipents in token"
+        set params [concat $params $trust]
+
+        foreach name [RecipientList $recipients] {
+            lappend params -r $name
         }
     } else {
         lappend params --symmetric
@@ -890,6 +903,9 @@ proc ::gpg::ExecGPG {token operation input args} {
             catch {close $fd}
 
             set data [read $pRead]
+            if {[string equal $operation decrypt]} {
+                set data [list plaintext $data]
+            }
         }
         verify -
         dverify {
@@ -1255,6 +1271,13 @@ proc ::gpg::RecipientList {token} {
         lappend recs [lindex $r 0]
     }
     return $recs
+}
+
+proc ::gpg::RecipientFullList {token} {
+    variable $token
+    upvar 0 $token state
+
+    return $state(recipients)
 }
 
 # ::gpg::JoinOptions --
