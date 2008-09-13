@@ -589,7 +589,8 @@ proc ::gpg::Parse {token gpgOutput} {
 
     set res {}
     set key {}
-    set st ""
+    set subkey {}
+    set subkeys {}
     foreach line [split $gpgOutput "\n"] {
         set fields [split $line ":"]
         switch -- [lindex $fields 0] {
@@ -597,29 +598,63 @@ proc ::gpg::Parse {token gpgOutput} {
             sec -
             crt -
             crs {
-                # Store the current key and start a new one
-                set st key
+                # Store the current key
+
+                if {[llength $subkey] > 0} {
+                    lappend subkeys $subkey
+                }
+                if {[llength $subkeys] > 0} {
+                    lappend key subkeys $subkeys
+                }
                 array set tmp $key
                 if {[::info exists tmp(fingerprint)]} {
                     set keys($tmp(fingerprint)) $key
                     lappend res $tmp(fingerprint)
                 }
                 array unset tmp
+
+                # Start a new key
+
+                set st key
                 set key {}
+                set subkey {}
+                set subkeys {}
             }
             sub -
             ssb {
+                # Store the current subkey
+
+                if {[llength $subkey] > 0} {
+                    lappend subkeys $subkey
+                }
+
                 # Start a new subkey
+
                 set st subkey
+                set subkey {}
             }
             sig {
                 # Signature
             }
         }
-        set key [concat $key [ParseRecord $st $fields]]
+        switch -- $st {
+            key {
+                set key [concat $key [ParseRecord $fields]]
+            }
+            subkey {
+                set subkey [concat $subkey [ParseRecord $fields]]
+            }
+        }
     }
 
     # Store the last key
+
+    if {[llength $subkey] > 0} {
+        lappend subkeys $subkey
+    }
+    if {[llength $subkeys] > 0} {
+        lappend key subkeys $subkeys
+    }
     array set tmp $key
     if {[::info exists tmp(fingerprint)]} {
         set keys($tmp(fingerprint)) $key
@@ -629,16 +664,21 @@ proc ::gpg::Parse {token gpgOutput} {
     return $res
 }
 
-proc ::gpg::ParseRecord {state fields} {
+proc ::gpg::ParseRecord {fields} {
+    puts $fields
     switch -- [lindex $fields 0] {
 	pub -
 	sec -
         crt -
-        crs {
+        crs -
+	sub -
+	ssb {
             # pub: public key
             # sec: secret key
             # crt: X.509 certificate
             # crs: X.509 certificate and private key available
+            # sub: subkey (secondary key)
+            # ssb: secret subkey (secondary key)
             set result [Trust [lindex $fields 1]]
             lappend result length    [lindex $fields 2]
             lappend result algorithm [Algorithm [lindex $fields 3]]
@@ -652,12 +692,6 @@ proc ::gpg::ParseRecord {state fields} {
             # TODO
             lappend result key-capability [lindex $fields 11]
             return $result
-        }
-	sub {
-            # subkey (secondary key)
-        }
-	ssb {
-            # secret subkey (secondary key)
         }
 	uid {
             # user id (only field 10 is used)
@@ -684,16 +718,8 @@ proc ::gpg::ParseRecord {state fields} {
         }
 	fpr {
             # fingerprint: (fingerprint is in field 10)
-            switch -- $state {
-                key {
-                    set fingerprint [lindex $fields 9]
-                    return [list fingerprint $fingerprint]
-                }
-                subkey {
-                    # TODO
-                    return {}
-                }
-            }
+            set fingerprint [lindex $fields 9]
+            return [list fingerprint $fingerprint]
         }
 	pkd {
             # public key data (special field format)
