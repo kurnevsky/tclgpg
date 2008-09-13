@@ -591,6 +591,7 @@ proc ::gpg::Parse {token gpgOutput} {
     set key {}
     set subkey {}
     set subkeys {}
+    set st ""
     foreach line [split $gpgOutput "\n"] {
         set fields [split $line ":"]
         switch -- [lindex $fields 0] {
