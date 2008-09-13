@@ -4,6 +4,10 @@
 	  attributes outside subkeys list (it's the first serious deviation
 	  from TclGPGME where the first subkey is a primary key).
 
+	* tclgpg.tcl: Separated execution of gpg from its subsequent usage to
+	  make it easier to implement asynchronous operations. Added optional
+	  calls to not implemented yet C-based gpg execution procedure.
+
 2008-09-12  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed verifying of detached signature (removed extra LF
