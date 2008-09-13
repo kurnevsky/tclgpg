@@ -290,27 +290,14 @@ proc ::gpg::Decrypt {token args} {
 
     foreach {key val} $args {
         switch -- $key {
-            -input { set input $val }
+            -input       { set input       $val }
             -checkstatus { set checkstatus $val }
         }
     }
 
-    set name_fd [TempFile]
-    foreach {filename fd} $name_fd break
+    set gpgChannels [ExecGPG --decrypt -- $input]
+    set res [UseGPG $token decrypt $gpgChannels]
 
-    puts -nonewline $fd $input
-    close $fd
-
-    set res [eval [list ExecGPG $token decrypt "" \
-                                --no-tty \
-                                --status-fd 2 \
-                                --logger-fd 2 \
-                                --command-fd 0 \
-                                --no-verbose \
-                                --output - \
-                                --decrypt] \
-                                -- $filename]
-    file delete -force -- $filename
     return $res
 }
 
@@ -321,42 +308,20 @@ proc ::gpg::Verify {token args} {
     foreach {key val} $args {
         switch -- $key {
             -signature { set signature $val }
-            -input { set input $val }
+            -input     { set input     $val }
         }
     }
 
     if {[::info exists input]} {
-        set op dverify
-        # A signature is detached, so create a temporary file
-        # with a signature.
-        set params {--enable-special-filenames --verify}
-
-        set name_fd [TempFile]
-        foreach {filename fd} $name_fd break
-
-        puts -nonewline $fd $signature
-        close $fd
-
-        set fnames [list $filename -]
+        set gpgChannels [ExecGPG --enable-special-filenames \
+                                 --verify \
+                                 -- $signature]
+        set res [UseGPG $token verify $gpgChannels $input]
     } else {
-        set op verify
-        set params {}
-        set fnames {}
-        set input $signature
+        set gpgChannels [ExecGPG --]
+        set res [UseGPG $token "" $gpgChannels $signature]
     }
 
-    set res [eval [list ExecGPG $token $op $input \
-                                --no-tty \
-                                --status-fd 2 \
-                                --logger-fd 2 \
-                                --command-fd 0 \
-                                --no-verbose \
-                                --output -] \
-                                $params \
-                                -- $fnames]
-    if {[::info exists filename]} {
-        file delete -force -- $filename
-    }
     Debug 2 $res
     return $res
 }
@@ -369,7 +334,7 @@ proc ::gpg::Sign {token args} {
     foreach {key val} $args {
         switch -- $key {
             -input { set input $val }
-            -mode { set mode $val }
+            -mode  { set mode  $val }
         }
     }
 
@@ -383,7 +348,7 @@ proc ::gpg::Sign {token args} {
     switch -- $mode {
         normal { lappend params --sign }
         detach { lappend params --detach-sign }
-        clear { lappend params --clearsign }
+        clear  { lappend params --clearsign }
     }
 
     array set tmp {}
@@ -393,15 +358,8 @@ proc ::gpg::Sign {token args} {
         lappend params -u $tmp(keyid)
     }
 
-    return [eval [list ExecGPG $token sign $input \
-                               --no-tty \
-                               --status-fd 2 \
-                               --logger-fd 2 \
-                               --command-fd 0 \
-                               --no-verbose \
-                               --output -] \
-                               $params \
-                               --]
+    set gpgChannels [eval ExecGPG $params --]
+    return [UseGPG $token sign $gpgChannels $input]
 }
 
 proc ::gpg::Encrypt {token args} {
@@ -411,9 +369,9 @@ proc ::gpg::Encrypt {token args} {
     set sign false
     foreach {key val} $args {
         switch -- $key {
-            -input { set input $val }
+            -input      { set input      $val }
             -recipients { set recipients $val }
-            -sign { set sign $val }
+            -sign       { set sign       $val }
         }
     }
 
@@ -465,15 +423,8 @@ proc ::gpg::Encrypt {token args} {
         lappend params --symmetric
     }
 
-    return [eval [list ExecGPG $token encrypt $input \
-                               --no-tty \
-                               --status-fd 2 \
-                               --logger-fd 2 \
-                               --command-fd 0 \
-                               --no-verbose \
-                               --output -] \
-                               $params \
-                               --]
+    set gpgChannels [eval ExecGPG $params --]
+    return [UseGPG $token encrypt $gpgChannels $input]
 }
 
 proc ::gpg::StartKey {token args} {
@@ -517,20 +468,15 @@ proc ::gpg::StartKey {token args} {
 }
 
 proc ::gpg::ListKeys {token operation patterns} {
-    variable $token
-    upvar 0 $token state
 
-    set gpgOutput [eval [list ExecGPG $token list-keys "" \
-                              --batch \
-                              --no-tty \
-                              --status-fd 2 \
-                              --with-colons \
-                              --fixed-list-mode \
-                              --with-fingerprint \
-                              --with-fingerprint \
-                              $operation --] $patterns]
-
-    return [Parse $token $gpgOutput]
+    set gpgChannels [eval ExecGPG --batch \
+                                  --with-colons \
+                                  --fixed-list-mode \
+                                  --with-fingerprint \
+                                  --with-fingerprint \
+                                  $operation -- $patterns]
+    set gpgOutput [UseGPG $token list-keys $gpgChannels]
+    return [Parse $gpgOutput]
 }
 
 proc ::gpg::NextKey {token args} {
@@ -559,8 +505,6 @@ proc ::gpg::DoneKey {token args} {
 
 proc ::gpg::InfoKey {token args} {
     variable keys
-    variable $token
-    upvar 0 $token state
 
     foreach {key val} $args {
         switch -- $key {
@@ -582,10 +526,8 @@ proc ::gpg::InfoKey {token args} {
     }
 }
 
-proc ::gpg::Parse {token gpgOutput} {
+proc ::gpg::Parse {gpgOutput} {
     variable keys
-    variable $token
-    upvar 0 $token state
 
     set res {}
     set key {}
@@ -822,13 +764,76 @@ proc ::gpg::Algorithm {code} {
     }
 }
 
-# TODO: Asynchronous processing (non-blocking channel)
+# ::gpg::ExecGPG --
+#
+#       Spawn a new gpg process adding several common arguments to a supplied
+#       arguments list. Added arguments are --no-tty, --quiet, --output -,
+#       --status-fd 2. If --batch doesn't belong to aruments list then
+#       --command-fd 0 is also added. But if the proc CExecGPG exists then it
+#       is called and its result is returned to a caller (with prepended empty
+#       string to show that there's no temporary file to delete).
+#
+# Arguments:
+#       Any arguments for gpg (see gpg(1) manual page) except --status-fd and
+#       --command-fd which are added automatically.
+#
+# Result:
+#       A list of opened pipes to a spawned process (with prepended temporary
+#       file name which is to be deleted after gpg finishes its work). It
+#       contains 5 or 6 elements: temporary file name, stdin, stdout, stderr,
+#       status-fd, command-fd (optionally). The actual channels may be the
+#       same (for example, stdin and command-fd are the same if CExecGPG
+#       doesn't exist).
+#
+# Side effects:
+#       A new gpg process is spawned. Also, if --decrypt or --verify options
+#       are present in arguments list then a temporary file is created.
 
-proc ::gpg::ExecGPG {token operation input args} {
+proc ::gpg::ExecGPG {args} {
     variable gpgExecutable
-    variable keys
 
     Debug 1 $args
+
+    if {![string equal [::info proc [namespace current]::CExecGPG] ""]} {
+
+        # C-based GPG invocation will use pipes instead of temporary files,
+        # so in case of decryption or verification of a detached signature
+        # it returns an additional channel where we put the input string.
+
+        if {[lsearch -exact $args --decrypt] >= 0 || \
+                [lsearch -exact $args --verify] >= 0} {
+            set input [lindex $args end]
+            set args [lrange $args 0 end-1]
+
+            set channels [eval CExecGPG $gpgExecutable $args]
+            set input_fd [lindex $channels end]
+            puts -nonewline $input_fd $input
+            close $input_fd
+
+            return [linsert [lrange $channels 0 end-1] 0 ""]
+        } else {
+            return [linsert [eval CExecGPG $gpgExecutable $args] 0 ""]
+        }
+    }
+
+    # For decryption or verification of a detached signature we use a
+    # temporary file, so encrypted message has to be passed (and it's
+    # passed as the last argument).
+
+    if {[lsearch -exact $args --decrypt] >= 0} {
+        set decrypt 1
+        set verify 0
+        set input [lindex $args end]
+        set args [lrange $args 0 end-1]
+    } elseif {[lsearch -exact $args --verify] >= 0} {
+        set decrypt 0
+        set verify 1
+        set input [lindex $args end]
+        set args [lrange $args 0 end-1]
+    } else {
+        set decrypt 0
+        set verify 0
+    }
 
     # Raise an error if there are dangerous arguments
 
@@ -842,13 +847,36 @@ proc ::gpg::ExecGPG {token operation input args} {
         }
     }
 
-    if {[string equal $operation list-keys]} {
-        set fd [open |[linsert $args 0 $gpgExecutable] r]
-        fconfigure $fd -translation binary
-        set data [read $fd]
-        Debug 2 $data
-        catch {close $fd}
-        return $data
+    # Create a temporary file for decryption or verification
+
+    if {$decrypt || $verify} {
+        set name_fd [TempFile]
+        foreach {filename fd} $name_fd break
+        puts -nonewline $fd $input
+        close $fd
+
+        set args [linsert $args end $filename]
+    } else {
+        set filename ""
+    }
+
+    # In case of verification of a detached signature two channels are
+    # necessary, so add stdin for signed input
+
+    if {$verify} {
+        set args [linsert $args end -]
+    }
+
+    # Add common --no-tty, --quiet, --output -, --status-fd arguments, and
+    # --command-fd if there's no --batch option
+
+    set args [linsert $args 0 --no-tty --quiet --output - --status-fd 2]
+
+    if {[lsearch -exact $args --batch] < 0} {
+        set args [linsert $args 0 --command-fd 0]
+        set command 1
+    } else {
+        set command 0
     }
 
     # Using either [chan pipe] from Tcl 8.6 or [pipe] from TclX.
@@ -875,11 +903,35 @@ proc ::gpg::ExecGPG {token operation input args} {
     close $pWrite
     close $qWrite
 
+    if {$command} {
+        # Return channels in order: temporary file name, stdin, stdout,
+        # stderr, status-fd, command-fd
+
+        return [list $filename $fd $pRead $qRead $qRead $fd]
+    } else {
+        # Return channels in order: temporary file name, stdin, stdout,
+        # stderr, status-fd
+
+        return [list $filename $fd $pRead $qRead $qRead]
+    }
+}
+
+# TODO: Asynchronous processing (non-blocking channel)
+
+proc ::gpg::UseGPG {token operation channels {input ""}} {
+    variable keys
+
+    foreach {filename stdin_fd stdout_fd stderr_fd status_fd command_fd} \
+            $channels break
+
     switch -- $operation {
+        list-keys {
+            set data [read $stdout_fd]
+        }
         encrypt -
         decrypt -
         sign {
-            while {[gets $qRead line] >= 0} {
+            while {[gets $status_fd line] >= 0} {
                 Debug 2 $line
                 set fields [split $line]
 
@@ -906,8 +958,9 @@ proc ::gpg::ExecGPG {token operation input args} {
                                         [join [lrange $fields 2 end] " "]] \
                                   "\n"]
                         Debug 2 $desc
-                        puts $fd [eval $pcb [list [list token $token \
-                                                        description $desc]]]
+                        puts $command_fd \
+                             [eval $pcb [list [list token $token \
+                                                    description $desc]]]
                     }
                     KEYEXPIRED {
                         return -code error "Key expired"
@@ -917,35 +970,36 @@ proc ::gpg::ExecGPG {token operation input args} {
                         if {[string equal $pcb ""]} {
                             return -code error "No passphrase"
                         }
-                        puts $fd [eval $pcb [list [list token $token \
-                                                        description ENTER]]]
+                        puts $command_fd \
+                             [eval $pcb [list [list token $token \
+                                                    description ENTER]]]
                     }
                 }
             }
 
             if {![string equal $input ""]} {
-                puts -nonewline $fd $input
+                puts -nonewline $stdin_fd $input
             }
-            catch {close $fd}
+            catch {close $stdin_fd}
 
-            set data [read $pRead]
+            set data [read $stdout_fd]
             if {[string equal $operation decrypt]} {
                 set data [list plaintext $data]
             }
         }
-        verify -
-        dverify {
+        "" -
+        verify {
             # Here $input contains either a signature, or a signed material
             # if a signature is detached.
-            puts -nonewline $fd $input
-            catch {close $fd}
+            puts -nonewline $stdin_fd $input
+            catch {close $stdin_fd}
 
             array unset sig
             array set sig [list status nosig validity unknown summary {}]
 
             set signatures {}
 
-            while {[gets $qRead line] >= 0} {
+            while {[gets $status_fd line] >= 0} {
                 Debug 2 $line
                 set fields [split $line]
 
@@ -1094,7 +1148,7 @@ proc ::gpg::ExecGPG {token operation input args} {
                 # "verify" means non-detached signature, so gpg reports the
                 # signed message to stdout.
 
-                set plaintext [read $pRead]
+                set plaintext [read $stdout_fd]
                 set data [list plaintext $plaintext]
             } else {
                 set data {}
@@ -1108,8 +1162,13 @@ proc ::gpg::ExecGPG {token operation input args} {
     # an error. So, the catch is necessary.
     # TODO: Process the error
 
-    catch {close $qRead}
-    catch {close $pRead}
+    catch {close $stdout_fd}
+    catch {close $status_fd}
+
+    if {![string equal $filename ""]} {
+        file delete -force -- $filename
+    }
+
     return $data
 }
 
