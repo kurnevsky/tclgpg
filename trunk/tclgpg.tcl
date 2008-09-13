@@ -665,7 +665,6 @@ proc ::gpg::Parse {token gpgOutput} {
 }
 
 proc ::gpg::ParseRecord {fields} {
-    puts $fields
     switch -- [lindex $fields 0] {
 	pub -
 	sec -
