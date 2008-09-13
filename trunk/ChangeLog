@@ -1,3 +1,9 @@
+2008-09-13  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Implemented parsing subkeys. Store primary key
+	  attributes outside subkeys list (it's the first serious deviation
+	  from TclGPGME where the first subkey is a primary key).
+
 2008-09-12  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed verifying of detached signature (removed extra LF
