@@ -288,6 +288,7 @@ proc ::gpg::Decrypt {token args} {
     variable $token
     upvar 0 $token state
 
+    set checkstatus false
     foreach {key val} $args {
         switch -- $key {
             -input       { set input       $val }
@@ -297,6 +298,19 @@ proc ::gpg::Decrypt {token args} {
 
     set gpgChannels [ExecGPG --decrypt -- $input]
     set res [UseGPG $token decrypt $gpgChannels]
+
+    # UseGPG returns decrypted message and signature status, so filter out
+    # unnecessary info
+
+    if {!$checkstatus} {
+        foreach {key val} $res {
+            switch -- $key {
+                plaintext {
+                    return [list $key $val]
+                }
+            }
+        }
+    }
 
     return $res
 }
@@ -339,7 +353,7 @@ proc ::gpg::Sign {token args} {
     }
 
     set armor [Get $token -property armor]
-    if {![string equal $armor ""] && $armor} {
+    if {$armor ne "" && $armor} {
         set params {--armor}
     } else {
         set params {}
@@ -376,7 +390,7 @@ proc ::gpg::Encrypt {token args} {
     }
 
     set armor [Get $token -property armor]
-    if {![string equal $armor ""] && $armor} {
+    if {$armor ne "" && $armor} {
         set params {--armor}
     } else {
         set params {}
@@ -469,14 +483,20 @@ proc ::gpg::StartKey {token args} {
 
 proc ::gpg::ListKeys {token operation patterns} {
 
-    set gpgChannels [eval ExecGPG --batch \
-                                  --with-colons \
-                                  --fixed-list-mode \
-                                  --with-fingerprint \
-                                  --with-fingerprint \
-                                  $operation -- $patterns]
-    set gpgOutput [UseGPG $token list-keys $gpgChannels]
-    return [Parse $gpgOutput]
+    set channels [eval ExecGPG --batch \
+                               --with-colons \
+                               --fixed-list-mode \
+                               --with-fingerprint \
+                               --with-fingerprint \
+                               $operation -- $patterns]
+
+    foreach {filename stdin_fd stdout_fd stderr_fd status_fd} $channels break
+    set res [Parse [read $stdout_fd]]
+    catch {close $stdin_fd}
+    catch {close $stdout_fd}
+    catch {close $stderr_fd}
+    catch {close $status_fd}
+    return $res
 }
 
 proc ::gpg::NextKey {token args} {
@@ -626,7 +646,7 @@ proc ::gpg::ParseRecord {fields} {
             lappend result algorithm [Algorithm [lindex $fields 3]]
             lappend result keyid     [lindex $fields 4]
             lappend result created   [lindex $fields 5]
-            if {![string equal [lindex $fields 6] ""]} {
+            if {[lindex $fields 6] ne ""} {
                 lappend result expire [lindex $fields 6]
             }
             # TODO
@@ -794,7 +814,7 @@ proc ::gpg::ExecGPG {args} {
 
     Debug 1 $args
 
-    if {![string equal [::info proc [namespace current]::CExecGPG] ""]} {
+    if {[::info proc [namespace current]::CExecGPG] ne ""} {
 
         # C-based GPG invocation will use pipes instead of temporary files,
         # so in case of decryption or verification of a detached signature
@@ -898,6 +918,8 @@ proc ::gpg::ExecGPG {args} {
 
     lappend args >@ $pWrite 2>@ $qWrite
 
+    Debug 2 [linsert $args 0 $gpgExecutable]
+
     set fd [open |[linsert $args 0 $gpgExecutable] w]
     fconfigure $fd -translation binary -buffering none
     close $pWrite
@@ -925,236 +947,237 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
             $channels break
 
     switch -- $operation {
-        list-keys {
-            set data [read $stdout_fd]
-        }
-        encrypt -
-        decrypt -
-        sign {
-            while {[gets $status_fd line] >= 0} {
-                Debug 2 $line
-                set fields [split $line]
-
-                if {![string equal [lindex $fields 0] "\[GNUPG:\]"]} continue
-
-                switch -- [lindex $fields 1] {
-                    BEGIN_ENCRYPTION { break }
-                    BEGIN_SIGNING { break }
-                    USERID_HINT {
-                        set userid_hint [join [lrange $fields 2 end]]
-                    }
-                    NEED_PASSPHRASE {
-                        if {![::info exists hint]} {
-                            set hint ENTER
-                        } else {
-                            set hint TRY_AGAIN
-                        }
-                        set pcb [Get $token -property passphrase-callback]
-                        if {[string equal $pcb ""]} {
-                            return -code error "No passphrase"
-                        }
-                        set desc \
-                            [join [list $hint $userid_hint \
-                                        [join [lrange $fields 2 end] " "]] \
-                                  "\n"]
-                        Debug 2 $desc
-                        puts $command_fd \
-                             [eval $pcb [list [list token $token \
-                                                    description $desc]]]
-                    }
-                    KEYEXPIRED {
-                        return -code error "Key expired"
-                    }
-                    NEED_PASSPHRASE_SYM {
-                        set pcb [Get $token -property passphrase-callback]
-                        if {[string equal $pcb ""]} {
-                            return -code error "No passphrase"
-                        }
-                        puts $command_fd \
-                             [eval $pcb [list [list token $token \
-                                                    description ENTER]]]
-                    }
-                }
-            }
-
-            if {![string equal $input ""]} {
-                puts -nonewline $stdin_fd $input
-            }
-            catch {close $stdin_fd}
-
-            set data [read $stdout_fd]
-            if {[string equal $operation decrypt]} {
-                set data [list plaintext $data]
-            }
-        }
         "" -
         verify {
             # Here $input contains either a signature, or a signed material
             # if a signature is detached.
             puts -nonewline $stdin_fd $input
             catch {close $stdin_fd}
+        }
+    }
 
-            array unset sig
-            array set sig [list status nosig validity unknown summary {}]
+    # Collect signatures if any (if operation is decrypt or verify)
 
-            set signatures {}
+    set signatures {}
+    array unset sig
 
-            while {[gets $status_fd line] >= 0} {
-                Debug 2 $line
-                set fields [split $line]
+    # Parse gpg status output
 
-                if {![string equal [lindex $fields 0] "\[GNUPG:\]"]} continue
+    while {[gets $status_fd line] >= 0} {
+        Debug 2 $line
+        set fields [split $line]
 
-                switch -- [lindex $fields 1] {
-                    NEWSIG {}
-                    GOODSIG {
-                        set sig(status) good
-                        set sig(keyid) [lindex $fields 2]
-                        set sig(uid) [join [lrange $fields 3 end]]
+        if {[lindex $fields 0] ne "\[GNUPG:\]"} continue
+
+        switch -- [lindex $fields 1] {
+            BEGIN_ENCRYPTION { break }
+            BEGIN_SIGNING { break }
+            USERID_HINT {
+                set userid_hint [join [lrange $fields 2 end]]
+            }
+            NEED_PASSPHRASE {
+                if {![::info exists hint]} {
+                    set hint ENTER
+                } else {
+                    set hint TRY_AGAIN
+                }
+                set pcb [Get $token -property passphrase-callback]
+                if {$pcb eq ""} {
+                    return -code error "No passphrase"
+                }
+                set desc \
+                    [join [list $hint $userid_hint \
+                                [join [lrange $fields 2 end] " "]] \
+                          "\n"]
+                Debug 2 $desc
+                puts $command_fd \
+                     [eval $pcb [list [list token $token \
+                                            description $desc]]]
+            }
+            NEED_PASSPHRASE_SYM {
+                set pcb [Get $token -property passphrase-callback]
+                if {$pcb eq ""} {
+                    return -code error "No passphrase"
+                }
+                puts $command_fd \
+                     [eval $pcb [list [list token $token \
+                                            description ENTER]]]
+            }
+            KEYEXPIRED {
+                switch -- $operation {
+                    "" -
+                    verify {}
+                    default {
+                        return -code error "Key expired"
                     }
-                    EXPSIG {
-                        set sig(status) expired
-                        set sig(keyid) [lindex $fields 2]
-                        set sig(uid) [join [lrange $fields 3 end]]
+                }
+            }
+            KEYREVOKED {
+                switch -- $operation {
+                    "" -
+                    verify {}
+                    default {
+                        return -code error "Key revoked"
                     }
-                    EXPKEYSIG {
-                        set sig(status) expiredkey
-                        set sig(keyid) [lindex $fields 2]
-                        set sig(uid) [join [lrange $fields 3 end]]
+                }
+            }
+            SIG_ID {
+                # Start of a signature, so finish the previous
+                # one if any and start a new one
+
+                if {[llength [array names sig]] > 0} {
+                    # Finish a signature
+                    if {$sig(status) eq "good" && \
+                            [llength $sig(summary)] == 1 && \
+                            [lindex $sig(summary) 0] eq "green"} {
+                        lappend sig(summary) valid
                     }
-                    REVKEYSIG {
-                        set sig(status) revokedkey
-                        set sig(keyid) [lindex $fields 2]
-                        set sig(uid) [join [lrange $fields 3 end]]
+                    lappend signatures [array get sig]
+                    array unset sig
+                }
+
+                # Start new signature
+                array set sig [list status nosig validity unknown \
+                                    summary {}]
+            }
+            GOODSIG {
+                set sig(status) good
+                set sig(keyid) [lindex $fields 2]
+                set sig(userid) [join [lrange $fields 3 end]]
+            }
+            EXPSIG {
+                set sig(status) expired
+                set sig(keyid) [lindex $fields 2]
+                set sig(userid) [join [lrange $fields 3 end]]
+            }
+            EXPKEYSIG {
+                set sig(status) expiredkey
+                set sig(keyid) [lindex $fields 2]
+                set sig(userid) [join [lrange $fields 3 end]]
+            }
+            REVKEYSIG {
+                set sig(status) revokedkey
+                set sig(keyid) [lindex $fields 2]
+                set sig(userid) [join [lrange $fields 3 end]]
+            }
+            BADSIG {
+                set sig(status) bad
+                lappend sig(summary) red
+                set sig(keyid) [lindex $fields 2]
+                set sig(userid) [join [lrange $fields 3 end]]
+            }
+            ERRSIG {
+                switch -- [lindex $fields 7] {
+                    9 {
+                        set sig(status) nokey
                     }
-                    BADSIG {
-                        set sig(status) bad
+                    default {
+                        set sig(status) error
+                    }
+                }
+                set sig(keyid) [lindex $fields 2]
+            }
+            VALIDSIG {
+                set sig(fingerprint) [lindex $fields 2]
+                set sig(created) [lindex $fields 4]
+                if {[lindex $fields 5] != 0} {
+                    set sig(expires) [lindex $fields 5]
+                }
+                set sig(key) [lindex $fields 11]
+                if {![::info exists keys($sig(key))]} {
+                    ListKeys $token --list-keys $sig(key)
+                }
+            }
+            TRUST_UNDEFINED {
+                set sig(validity) unknown
+            }
+            TRUST_NEVER {
+                set sig(validity) never
+                switch -- $sig(status) {
+                    good -
+                    expired -
+                    expiredkey {
                         lappend sig(summary) red
-                        set sig(keyid) [lindex $fields 2]
-                        set sig(uid) [join [lrange $fields 3 end]]
-                    }
-                    ERRSIG {
-                        switch -- [lindex $fields 7] {
-                            9 {
-                                set sig(status) nokey
-                            }
-                            default {
-                                set sig(status) error
-                            }
-                        }
-                        set sig(keyid) [lindex $fields 2]
-                    }
-                    VALIDSIG {
-                        set sig(fingerprint) [lindex $fields 2]
-                        set sig(created) [lindex $fields 4]
-                        if {[lindex $fields 5] != 0} {
-                            set sig(expires) [lindex $fields 5]
-                        }
-                        set sig(key) [lindex $fields 11]
-                        if {![::info exists keys($sig(key))]} {
-                            ListKeys $token --list-keys $sig(key)
-                        }
-                    }
-                    SIG_ID {}
-                    NODATA -
-                    UNEXPECTED {
-                        set sig(status) nosig
-                        lappend signatures [array get sig]
-                        array unset sig
-                        array set sig [list status nosig validity unknown \
-                                            summary {}]
-                    }
-                    KEYEXPIRED {
-                        set sig(status) expiredkey
-                    }
-                    KEYREVOKED {
-                        set sig(status) revokedkey
-                    }
-                    TRUST_UNDEFINED {
-                        set sig(validity) unknown
-                    }
-                    TRUST_NEVER {
-                        set sig(validity) never
-                        switch -- $sig(status) {
-                            good -
-                            expired -
-                            expiredkey {
-                                lappend sig(summary) red
-                            }
-                        }
-                    }
-                    TRUST_MARGINAL {
-                        set sig(validity) marginal
-                    }
-                    TRUST_FULLY -
-                    TRUST_ULTIMATE {
-                        set sig(validity) full
-                        switch -- $sig(status) {
-                            good -
-                            expired -
-                            expiredkey {
-                                lappend sig(summary) green
-                            }
-                        }
-                    }
-                }
-
-                switch -- [lindex $fields 1] {
-                    BADSIG -
-                    ERRSIG -
-                    TRUST_UNDEFINED -
-                    TRUST_NEVER -
-                    TRUST_MARGINAL -
-                    TRUST_FULLY -
-                    TRUST_ULTIMATE {
-                        # Finish a signature
-                        if {[string equal $sig(status) good] && \
-                                [llength $sig(summary)] == 1 && \
-                                [string equal [lindex $sig(summary) 0] green]} {
-                            lappend sig(summary) valid
-                        }
-                        lappend signatures [array get sig]
-                        array unset sig
-                        array set sig [list status nosig validity unknown \
-                                            summary {}]
                     }
                 }
             }
-
-            set statuses {}
-            foreach s $signatures {
-                array unset sig
-                array set sig $s
-                lappend statuses $sig(status)
+            TRUST_MARGINAL {
+                set sig(validity) marginal
             }
-            set statuses [lsort -unique $statuses]
-            switch -- [llength $statuses] {
-                0 {
-                    set status nosig
-                }
-                1 {
-                    # All signatures have the same status
-                    set status [lindex $statuses 0]
-                }
-                default {
-                    # There are different statuses
-                    set ststus diff
+            TRUST_FULLY -
+            TRUST_ULTIMATE {
+                set sig(validity) full
+                switch -- $sig(status) {
+                    good -
+                    expired -
+                    expiredkey {
+                        lappend sig(summary) green
+                    }
                 }
             }
-
-            if {[string equal $operation verify] && \
-                    ![string equal $status nosig]} {
-
-                # "verify" means non-detached signature, so gpg reports the
-                # signed message to stdout.
-
-                set plaintext [read $stdout_fd]
-                set data [list plaintext $plaintext]
-            } else {
-                set data {}
+            NODATA -
+            UNEXPECTED {
+                set sig(status) nosig
             }
+        }
+    }
 
-            lappend data status $status signatures $signatures
+    # Finish the last signature (if any)
+
+    if {[llength [array names sig]] > 0} {
+        # Finish a signature
+        if {$sig(status) eq "good" && \
+                [llength $sig(summary)] == 1 && \
+                [lindex $sig(summary) 0] eq "green"} {
+            lappend sig(summary) valid
+        }
+        lappend signatures [array get sig]
+        array unset sig
+    }
+
+    set statuses {}
+    foreach s $signatures {
+        array unset sig
+        array set sig $s
+        lappend statuses $sig(status)
+    }
+    set statuses [lsort -unique $statuses]
+    switch -- [llength $statuses] {
+        0 {
+            # There's no signature
+            set status nosig
+        }
+        1 {
+            # All signatures have the same status
+            set status [lindex $statuses 0]
+        }
+        default {
+            # There are different statuses
+            set ststus diff
+        }
+    }
+
+    switch -- $operation {
+        encrypt -
+        sign {
+            # Supply message for decryption, encryption or signing
+
+            puts -nonewline $stdin_fd $input
+            catch {close $stdin_fd}
+
+            set data [read $stdout_fd]
+        }
+        decrypt -
+        "" {
+            # "" means verifying non-detached signature, so gpg reports
+            # the signed message to stdout.
+
+            set plaintext [read $stdout_fd]
+            set data [list plaintext $plaintext status $status \
+                           signatures $signatures]
+        }
+        verify {
+            set data [list status $status signatures $signatures]
         }
     }
 
@@ -1162,10 +1185,13 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
     # an error. So, the catch is necessary.
     # TODO: Process the error
 
+    catch {close $stdin_fd}
     catch {close $stdout_fd}
+    catch {close $stderr_fd}
     catch {close $status_fd}
+    catch {close $command_fd}
 
-    if {![string equal $filename ""]} {
+    if {$filename ne ""} {
         file delete -force -- $filename
     }
 
@@ -1436,7 +1462,7 @@ proc ::gpg::TempFile {} {
             }
         }
     }
-    if {[string equal $fd ""]} {
+    if {$fd eq ""} {
         return -code error \
                "failed to find an unused temporary file name"
     } else {
