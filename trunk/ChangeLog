@@ -13,6 +13,8 @@
 	* tclgpg.tcl: Added checks for procedure arguments and added comments
 	  describing what main procedures do.
 
+	* tclgpg.test: Started TclGPG test suite.
+
 2008-09-13  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Implemented parsing subkeys. Store primary key

@@ -1,0 +1,38 @@
+# tclgpg.test --
+#
+#       This file is part of the TclGPG library. It contains tests.
+#
+# Copyright (c) 2008 Sergei Golovan <sgolovan@nes.ru>
+#                    Antoni Grzymala <antoni@chopin.edu.pl>
+#
+# See the file "license.terms" for information on usage and redistribution
+# of this file, and for a DISCLAMER OF ALL WARRANTIES.
+#
+# $Id$
+
+package require tcltest 2
+
+namespace import tcltest::*
+
+set auto_path [linsert $auto_path 0 [file dirname [info script]]]
+
+set env(GNUPGHOME) [file join [file dirname [info script]] gnupg]
+file attributes $env(GNUPGHOME) -permissions 0700
+
+package forget gpg
+package require -exact gpg 1.0
+
+test gpg-1.1 {Create context} -body {
+  set c [gpg::context]
+  string equal [info procs $c] $c
+} -result 1
+
+test gpg-1.2 {Create and destroy context} -body {
+  set c [gpg::context]
+  rename $c ""
+  info procs $c
+} -result ""
+
+cleanupTests
+
+# vim:ts=8:sw=4:sts=4:et:ft=tcl
