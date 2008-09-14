@@ -6,6 +6,13 @@
 	  expressions because Tcl 8.4 is a requirement, so there's no need in
 	  using [string equal].
 
+	* tclgpg.tcl: Added support for pipe package and simplified pipe
+	  creation; also redefined gpg executable variable for Windows
+	  platform (thanks to Konstantin Khomoutov).
+
+	* tclgpg.tcl: Added checks for procedure arguments and added comments
+	  describing what main procedures do.
+
 2008-09-13  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Implemented parsing subkeys. Store primary key
