@@ -286,7 +286,20 @@ proc ::gpg::Set {token args} {
                [format "missing property:\
                         must be %s" $prop [JoinOptions $properties]]
     } elseif {[lsearch -exact $properties $prop] >= 0} {
-        set state($prop) $value
+        switch -- $prop {
+            armor -
+            textmode {
+                if {[string is boolean -strict $value]} {
+                    set state($prop) $value
+                } else {
+                    return -code error \
+                           [format "invalid %s value \"%s\":\
+                                    must be boolean" $prop $value]
+                }
+            default {
+                # TODO: Checking other properties values
+                set state($prop) $value
+            }
         return
     } else {
         return -code error \
@@ -393,7 +406,7 @@ proc ::gpg::Sign {token args} {
     if {[Get $token -property armor]} {
         set params {--armor}
     } else {
-        set params {}
+        set params {--no-armor}
     }
 
     switch -- $mode {
@@ -416,7 +429,7 @@ proc ::gpg::Sign {token args} {
         lappend params -u $tmp(keyid)
     }
 
-    set gpgChannels [eval ExecGPG $params --]
+    set gpgChannels [eval ExecGPG $token $params --]
     return [UseGPG $token sign $gpgChannels $input]
 }
 
@@ -481,7 +494,7 @@ proc ::gpg::Encrypt {token args} {
     if {[Get $token -property armor]} {
         set params {--armor}
     } else {
-        set params {}
+        set params {--no-armor}
     }
 
     if {$sign} {
@@ -525,7 +538,7 @@ proc ::gpg::Encrypt {token args} {
         lappend params --symmetric
     }
 
-    set gpgChannels [eval ExecGPG $params --]
+    set gpgChannels [eval ExecGPG $token $params --]
     return [UseGPG $token encrypt $gpgChannels $input]
 }
 
@@ -570,12 +583,12 @@ proc ::gpg::Verify {token args} {
     }
 
     if {[::info exists input]} {
-        set gpgChannels [ExecGPG --enable-special-filenames \
+        set gpgChannels [ExecGPG $token --enable-special-filenames \
                                  --verify \
                                  -- $signature]
         set res [UseGPG $token verify $gpgChannels $input]
     } else {
-        set gpgChannels [ExecGPG --]
+        set gpgChannels [ExecGPG $token --]
         set res [UseGPG $token "" $gpgChannels $signature]
     }
 
@@ -631,7 +644,7 @@ proc ::gpg::Decrypt {token args} {
         return -code error "missing input to decrypt"
     }
 
-    set gpgChannels [ExecGPG --decrypt -- $input]
+    set gpgChannels [ExecGPG $token --decrypt -- $input]
     set res [UseGPG $token decrypt $gpgChannels]
 
     # UseGPG returns decrypted message and signature status, so filter out
@@ -829,12 +842,12 @@ proc ::gpg::InfoKey {token args} {
 
 proc ::gpg::ListKeys {token operation patterns} {
 
-    set channels [eval ExecGPG --batch \
-                               --with-colons \
-                               --fixed-list-mode \
-                               --with-fingerprint \
-                               --with-fingerprint \
-                               $operation -- $patterns]
+    set channels [eval ExecGPG $token --batch \
+                                      --with-colons \
+                                      --fixed-list-mode \
+                                      --with-fingerprint \
+                                      --with-fingerprint \
+                                      $operation -- $patterns]
 
     foreach {filename stdin_fd stdout_fd stderr_fd status_fd} $channels break
     # TODO: Do we have to set encoding to UTF-8?
@@ -1094,8 +1107,9 @@ proc ::gpg::Algorithm {code} {
 #       string to show that there's no temporary file to delete).
 #
 # Arguments:
-#       Any arguments for gpg (see gpg(1) manual page) except --status-fd and
-#       --command-fd which are added automatically.
+#       token       A GPG context token created in ::gpg::context.
+#       args        Any arguments for gpg (see gpg(1) manual page) except
+#                   --status-fd and --command-fd which are added automatically.
 #
 # Result:
 #       A list of opened pipes to a spawned process (with prepended temporary
@@ -1109,10 +1123,22 @@ proc ::gpg::Algorithm {code} {
 #       A new gpg process is spawned. Also, if --decrypt or --verify options
 #       are present in arguments list then a temporary file is created.
 
-proc ::gpg::ExecGPG {args} {
+proc ::gpg::ExecGPG {token args} {
     variable gpgExecutable
 
     Debug 1 $args
+
+    # Set --textmode option before calling CExecGPG to make it simpler.
+
+    set textmode [Get $token -property textmode]
+
+    if {$textmode} {
+        set args [linsert $args 0 --textmode]
+    } else {
+        # This option is default, but add it to override value in
+        # config file.
+        set args [linsert $args 0 --no-textmode]
+    }
 
     if {[::info proc [namespace current]::CExecGPG] ne ""} {
 
@@ -1127,6 +1153,11 @@ proc ::gpg::ExecGPG {args} {
 
             set channels [eval CExecGPG $gpgExecutable $args]
             set input_fd [lindex $channels end]
+
+            if {$textmode} {
+                fconfigure $input_fd -translation crlf
+            }
+
             puts -nonewline $input_fd $input
             close $input_fd
 
@@ -1172,6 +1203,11 @@ proc ::gpg::ExecGPG {args} {
     if {$decrypt || $verify} {
         set name_fd [TempFile]
         foreach {filename fd} $name_fd break
+
+        if {$textmode} {
+            fconfigure $fd -translation crlf
+        }
+
         puts -nonewline $fd $input
         close $fd
 
