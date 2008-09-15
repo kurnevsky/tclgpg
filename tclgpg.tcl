@@ -139,6 +139,9 @@ proc ::gpg::context {} {
 
     set state(id) $id
 
+    # Default settings
+    set state(armor) false
+
     proc $token {args} "eval {[namespace current]::Exec} {$token} \$args"
 
     trace add command $token delete [namespace code [list Free $token]]
@@ -387,8 +390,7 @@ proc ::gpg::Sign {token args} {
         return -code error "missing input to sign"
     }
 
-    set armor [Get $token -property armor]
-    if {$armor ne "" && $armor} {
+    if {[Get $token -property armor]} {
         set params {--armor}
     } else {
         set params {}
@@ -476,8 +478,7 @@ proc ::gpg::Encrypt {token args} {
         return -code error "missing input to encrypt"
     }
 
-    set armor [Get $token -property armor]
-    if {$armor ne "" && $armor} {
+    if {[Get $token -property armor]} {
         set params {--armor}
     } else {
         set params {}
@@ -836,6 +837,7 @@ proc ::gpg::ListKeys {token operation patterns} {
                                $operation -- $patterns]
 
     foreach {filename stdin_fd stdout_fd stderr_fd status_fd} $channels break
+    # TODO: Do we have to set encoding to UTF-8?
     set res [Parse [read $stdout_fd]]
     catch {close $stdin_fd}
     catch {close $stdout_fd}
@@ -1188,7 +1190,7 @@ proc ::gpg::ExecGPG {args} {
     # Add common --no-tty, --quiet, --output -, --status-fd arguments, and
     # --command-fd if there's no --batch option
 
-    set args [linsert $args 0 --no-tty --quiet --output - --status-fd 2]
+    set args [linsert $args 0 --no-tty --quiet --output - --charset utf-8 --status-fd 2]
 
     if {[lsearch -exact $args --batch] < 0} {
         set args [linsert $args 0 --command-fd 0]
@@ -1199,11 +1201,10 @@ proc ::gpg::ExecGPG {args} {
 
     set pList [pipe]
     foreach {pRead pWrite} $pList break
-    fconfigure $pRead -translation binary
 
     set qList [pipe]
     foreach {qRead qWrite} $qList break
-    fconfigure $qRead -translation binary
+    fconfigure $qRead -encoding utf-8
 
     # Redirect stdout and stderr to pipes
 
@@ -1485,6 +1486,10 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
             puts -nonewline $stdin_fd $input
             catch {close $stdin_fd}
 
+            if {![Get $token -property armor]} {
+                fconfigure $stdout_fd -translation binary
+            }
+
             set data [read $stdout_fd]
         }
         decrypt -
@@ -1492,6 +1497,7 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
             # "" means verifying non-detached signature, so gpg reports
             # the signed message to stdout.
 
+            fconfigure $stdout_fd -translation binary
             set plaintext [read $stdout_fd]
             set data [list plaintext $plaintext status $status \
                            signatures $signatures]
