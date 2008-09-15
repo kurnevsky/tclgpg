@@ -34,12 +34,26 @@ Set a specified property.
 Get a specified property.
 
 [call [cmd "\$token"] \
+        [arg "-operation list-keys"] \
+        [opt [arg "-patterns patterns"]] \
+	[opt [arg "-secretonly boolean"]]]
+
+Return list of key tokens which match any of a specified patterns in the
+patterns list [arg patterns].
+
+[call [cmd "\$token"] \
+        [arg "-operation info-key"] \
+	[arg "-key keytoken"]]
+
+Return a serialized array of key properties.
+
+[call [cmd "\$token"] \
         [arg "-operation start-key"] \
         [opt [arg "-patterns patterns"]] \
 	[opt [arg "-secretonly boolean"]]]
 
-Start searching for keys which match any of a specified patterns in the patterns
-list [arg patterns].
+Start searching for keys which match any of a specified patterns in the
+patterns list [arg patterns].
 
 [call [cmd "\$token"] \
         [arg "-operation next-key"]]
@@ -50,12 +64,6 @@ Return the next key token in a search list.
         [arg "-operation done-key"]]
 
 Stop searching for keys.
-
-[call [cmd "\$token"] \
-        [arg "-operation info-key"] \
-	[arg "-key keytoken"]]
-
-Return a serialized array of key properties.
 
 [call [cmd "\$token"] \
         [arg "-operation encrypt"] \
