@@ -1,3 +1,8 @@
+2008-09-15  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Fixed processing text input from gpg on Windows systems
+	  (with CRLF line breaks). Added --charset utf-8 option to gpg call.
+
 2008-09-14  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Joined processing of all gpg status messages together,
