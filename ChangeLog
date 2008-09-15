@@ -4,6 +4,10 @@
 	  (with CRLF line breaks). Added --charset utf-8 option to gpg call.
 	  Added support for text mode (option --textmode, untested yet).
 
+	* tclgpg.tcl: Fixed textmode initialization and added list-keys
+	  operation which is more convenient than trio start-key, next-key,
+	  done-key.
+
 2008-09-14  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Joined processing of all gpg status messages together,

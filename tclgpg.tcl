@@ -141,6 +141,7 @@ proc ::gpg::context {} {
 
     # Default settings
     set state(armor) false
+    set state(textmode) false
 
     proc $token {args} "eval {[namespace current]::Exec} {$token} \$args"
 
@@ -206,6 +207,7 @@ proc ::gpg::Exec {token args} {
         wait      { set res [eval [list Wait     $token] $newArgs] }
         get       { set res [eval [list Get      $token] $newArgs] }
         set       { set res [eval [list Set      $token] $newArgs] }
+        list-keys { set res [eval [list ListKeys $token] $newArgs] }
         start-key { set res [eval [list StartKey $token] $newArgs] }
         next-key  { set res [eval [list NextKey  $token] $newArgs] }
         done-key  { set res [eval [list DoneKey  $token] $newArgs] }
@@ -296,10 +298,12 @@ proc ::gpg::Set {token args} {
                            [format "invalid %s value \"%s\":\
                                     must be boolean" $prop $value]
                 }
+            }
             default {
                 # TODO: Checking other properties values
                 set state($prop) $value
             }
+        }
         return
     } else {
         return -code error \
@@ -663,6 +667,59 @@ proc ::gpg::Decrypt {token args} {
     return $res
 }
 
+# ::gpg::ListKeys --
+#
+#       Return a key list.
+#
+# Arguments:
+#       token               A GPG context token created in ::gpg::context.
+#       -patterns patterns  A list of patterns to search for in keys available
+#                           to GnuPG. Patterns may contain key ID, fingerprint,
+#                           user ID etc. See gpg(1) manual page for details.
+#       -secretonly bool    (optional, defaults to false) A boolean which shows
+#                           if secret keys should be found. If false then only
+#                           public keys are searched.
+#
+# Result:
+#       A list of matching keys.
+#
+# Side effects:
+#       A global keys array is populated by keys which match given patterns.
+
+proc ::gpg::ListKeys {token args} {
+    variable $token
+    upvar 0 $token state
+
+    set patterns {}
+    set operation --list-keys
+
+    foreach {key val} $args {
+        switch -- $key {
+            -patterns {
+                set patterns $val
+            }
+            -secretonly {
+                if {[string is true -strict $val]} {
+                    set operation --list-secret-keys
+                } elseif {![string is false -strict $val]} {
+                    return -code error \
+                           [format "invalid -secretonly value \"%s\":\
+                                    must be boolean" $val]
+                }
+            }
+            default {
+                return -code error \
+                       [format "unknown option \"%s\":\
+                                must be %s" $key [JoinOptions {-operation
+                                                               -patterns
+                                                               -secretonly}]]
+            }
+        }
+    }
+
+    return [FindKeys $token $operation $patterns]
+}
+
 # ::gpg::StartKey --
 #
 #       Start an element-by-element traversing through a key list.
@@ -719,7 +776,7 @@ proc ::gpg::StartKey {token args} {
         }
     }
 
-    set state(keylist) [ListKeys $token $operation $patterns]
+    set state(keylist) [FindKeys $token $operation $patterns]
     set state(keyidx) -1
 
     return
@@ -820,7 +877,7 @@ proc ::gpg::InfoKey {token args} {
     }
 }
 
-# ::gpg::ListKeys --
+# ::gpg::FindKeys --
 #
 #       A helper procedure which requests gpg for a list of keys and returns
 #       their fingerprints (which are used as indices of a global keys array)
@@ -840,7 +897,7 @@ proc ::gpg::InfoKey {token args} {
 # Side effects:
 #       A global keys array is populated by keys which match given patterns.
 
-proc ::gpg::ListKeys {token operation patterns} {
+proc ::gpg::FindKeys {token operation patterns} {
 
     set channels [eval ExecGPG $token --batch \
                                       --with-colons \
