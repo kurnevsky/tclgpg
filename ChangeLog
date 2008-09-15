@@ -2,6 +2,7 @@
 
 	* tclgpg.tcl: Fixed processing text input from gpg on Windows systems
 	  (with CRLF line breaks). Added --charset utf-8 option to gpg call.
+	  Added support for text mode (option --textmode, untested yet).
 
 2008-09-14  Sergei Golovan  <sgolovan@nes.ru>
 
