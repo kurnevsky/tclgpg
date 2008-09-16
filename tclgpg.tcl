@@ -844,7 +844,7 @@ proc ::gpg::DoneKey {token} {
 # Result:
 #       A serialised array with key info (some array indices may repeat,
 #       so don't really use it as an array) or error if this key wasn't
-#       listed using ListKeys yet..
+#       listed using FindKeys yet..
 #
 # Side effects:
 #       None.
@@ -1499,7 +1499,7 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
                 }
                 set sig(key) [lindex $fields 11]
                 if {![::info exists keys($sig(key))]} {
-                    ListKeys $token --list-keys $sig(key)
+                    FindKeys $token --list-keys $sig(key)
                 }
             }
             TRUST_UNDEFINED {

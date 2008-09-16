@@ -1,3 +1,8 @@
+2008-09-16  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Fixed bug where ListKeys was forgotten to rename to
+	  FindKeys in a call.
+
 2008-09-15  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed processing text input from gpg on Windows systems
