@@ -18,11 +18,7 @@ if {[package vsatisfies $::tcl_version 8.6]} {
 }
 
 namespace eval ::gpg {
-    if {[string equal $::tcl_platform(platform) windows]} {
-        variable gpgExecutable gpg.exe
-    } else {
-        variable gpgExecutable /usr/bin/gpg
-    }
+    variable gpgExecutable [auto_execok gpg]
 
     if {[catch {exec $gpgExecutable --version} msg] || \
             ![string match "gpg (GnuPG) *" $msg]} {
