@@ -1,3 +1,12 @@
+2008-09-20  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Made search for gpg executable more correct (thanks to
+	  Konstantin Khomoutov).
+
+	* tclgpg.tcl: Refuse to load the package if gpg-agent isn't running
+	  for gpg 2.0 and newer, because it accepts passphrases only from
+	  gpg-agent.
+
 2008-09-16  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed bug where ListKeys was forgotten to rename to
