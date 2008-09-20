@@ -17,34 +17,43 @@ if {[package vsatisfies $::tcl_version 8.6]} {
     package require Tclx
 }
 
+if {[llength [auto_execok gpg]] == 0 || \
+        ![regexp {^gpg \(GnuPG\) ([\d\.]+)} [exec gpg --version] \
+                 -> gpgVersion]} {
+    return -code error "GnuPG binary is unusable"
+}
+
+if {[package vsatisfies $gpgVersion 2.0] && \
+        ![info exists ::env(GPG_AGENT_INFO)]} {
+    unset gpgVersion
+    return -code error \
+           "GnuPG 2 cannot be used without gpg-agent"
+}
+
+package provide gpg 1.0
+
 namespace eval ::gpg {
-    variable gpgExecutable [auto_execok gpg]
-
-    if {[catch {exec $gpgExecutable --version} msg] || \
-            ![string match "gpg (GnuPG) *" $msg]} {
-
-        # Destory the current namespace if it contains nothing except
-        # the gpgExecutable variable. Otherwise it contains user data,
-        # so it must be preserved.
-
-        if {[llength [info vars [namespace current]::*]] == 1 && \
-                [llength [info procs [namespace current]::*]] == 0} {
-            namespace delete [namespace current]
-        } else {
-            unset gpgExecutable
-        }
-
-        return -code error "GnuPG binary is unusable"
-    }
-
-    package provide gpg 1.0
-
     variable validities [list unknown undefined never marginal full ultimate]
 
+    variable Version $::gpgVersion
+    unset gpgVersion
+puts $Version
     # Variable to store public keys
     variable keys
 
     variable debug 2
+}
+
+# ::gpg::executable --
+# Purpose:
+#  Finds a GnuPG executable in the system using the same rules [exec] does.
+# Returns:
+#  Full pathname of the first occurence of the GnuPG executable found
+#  or an empty string if the search yielded no results.
+# Side effects:
+#  Updates the global Tcl array auto_execs on success (see library(3tcl)).
+proc ::gpg::executable {} {
+    lindex [auto_execok gpg] 0
 }
 
 # ::gpg::info --
@@ -1177,8 +1186,6 @@ proc ::gpg::Algorithm {code} {
 #       are present in arguments list then a temporary file is created.
 
 proc ::gpg::ExecGPG {token args} {
-    variable gpgExecutable
-
     Debug 1 $args
 
     # Set --textmode option before calling CExecGPG to make it simpler.
@@ -1204,7 +1211,7 @@ proc ::gpg::ExecGPG {token args} {
             set input [lindex $args end]
             set args [lrange $args 0 end-1]
 
-            set channels [eval CExecGPG $gpgExecutable $args]
+            set channels [eval CExecGPG [executable] $args]
             set input_fd [lindex $channels end]
 
             if {$textmode} {
@@ -1216,7 +1223,7 @@ proc ::gpg::ExecGPG {token args} {
 
             return [linsert [lrange $channels 0 end-1] 0 ""]
         } else {
-            return [linsert [eval CExecGPG $gpgExecutable $args] 0 ""]
+            return [linsert [eval CExecGPG [executable] $args] 0 ""]
         }
     }
 
@@ -1299,9 +1306,9 @@ proc ::gpg::ExecGPG {token args} {
 
     lappend args >@ $pWrite 2>@ $qWrite
 
-    Debug 2 [linsert $args 0 $gpgExecutable]
+    Debug 2 [linsert $args 0 [executable]]
 
-    set fd [open |[linsert $args 0 $gpgExecutable] w]
+    set fd [open |[linsert $args 0 [executable]] w]
     fconfigure $fd -translation binary -buffering none
     close $pWrite
     close $qWrite
@@ -1347,6 +1354,7 @@ proc ::gpg::ExecGPG {token args} {
 #       Asynchronous processing (non-blocking channel)
 
 proc ::gpg::UseGPG {token operation channels {input ""}} {
+    variable Version
     variable keys
 
     foreach {filename stdin_fd stdout_fd stderr_fd status_fd command_fd} \
@@ -1382,34 +1390,38 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
                 set userid_hint [join [lrange $fields 2 end]]
             }
             NEED_PASSPHRASE {
-                if {![::info exists hint]} {
-                    set hint ENTER
-                } else {
-                    set hint TRY_AGAIN
+                if {![package vsatisfies $Version 2.0]} {
+                    if {![::info exists hint]} {
+                        set hint ENTER
+                    } else {
+                        set hint TRY_AGAIN
+                    }
+                    set pcb [Get $token -property passphrase-callback]
+                    if {$pcb eq ""} {
+                        # TODO: cleanup
+                        return -code error "No passphrase"
+                    }
+                    set desc \
+                        [join [list $hint $userid_hint \
+                                    [join [lrange $fields 2 end] " "]] \
+                              "\n"]
+                    Debug 2 $desc
+                    puts $command_fd \
+                         [eval $pcb [list [list token $token \
+                                                description $desc]]]
                 }
-                set pcb [Get $token -property passphrase-callback]
-                if {$pcb eq ""} {
-                    # TODO: cleanup
-                    return -code error "No passphrase"
-                }
-                set desc \
-                    [join [list $hint $userid_hint \
-                                [join [lrange $fields 2 end] " "]] \
-                          "\n"]
-                Debug 2 $desc
-                puts $command_fd \
-                     [eval $pcb [list [list token $token \
-                                            description $desc]]]
             }
             NEED_PASSPHRASE_SYM {
-                set pcb [Get $token -property passphrase-callback]
-                if {$pcb eq ""} {
-                    # TODO: cleanup
-                    return -code error "No passphrase"
+                if {![package vsatisfies $Version 2.0]} {
+                    set pcb [Get $token -property passphrase-callback]
+                    if {$pcb eq ""} {
+                        # TODO: cleanup
+                        return -code error "No passphrase"
+                    }
+                    puts $command_fd \
+                         [eval $pcb [list [list token $token \
+                                                description ENTER]]]
                 }
-                puts $command_fd \
-                     [eval $pcb [list [list token $token \
-                                            description ENTER]]]
             }
             KEYEXPIRED {
                 switch -- $operation {
