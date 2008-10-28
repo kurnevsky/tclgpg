@@ -18,7 +18,8 @@ if {[package vsatisfies $::tcl_version 8.6]} {
 }
 
 if {[llength [auto_execok gpg]] == 0 || \
-        ![regexp {^gpg \(GnuPG\) ([\d\.]+)} [exec gpg --version] \
+        ![regexp {^gpg \(GnuPG\) ([\d\.]+)} \
+                 [exec [lindex [auto_execok gpg] 0] --version] \
                  -> gpgVersion]} {
     return -code error "GnuPG binary is unusable"
 }
@@ -37,11 +38,11 @@ namespace eval ::gpg {
 
     variable Version $::gpgVersion
     unset gpgVersion
-puts $Version
+
     # Variable to store public keys
     variable keys
 
-    variable debug 2
+    variable debug 0
 }
 
 # ::gpg::executable --

@@ -1,3 +1,7 @@
+2008-10-28  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Made the first gpg call use auto_execok.
+
 2008-09-20  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Made search for gpg executable more correct (thanks to
