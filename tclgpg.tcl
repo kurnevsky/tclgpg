@@ -11,10 +11,13 @@
 
 package require Tcl 8.4
 
-if {[package vsatisfies $::tcl_version 8.6]} {
-    interp alias {} pipe {} chan pipe
-} elseif {[catch {package require pipe}]} {
-    package require Tclx
+if {[catch {load [file join [file dirname [info script]] \
+			    tclgpg[info sharedlibextension]]} res]} {
+    if {[package vsatisfies $::tcl_version 8.6]} {
+	interp alias {} pipe {} chan pipe
+    } elseif {[catch {package require pipe}]} {
+	package require Tclx
+    }
 }
 
 if {[llength [auto_execok gpg]] == 0 || \
@@ -1189,6 +1192,10 @@ proc ::gpg::Algorithm {code} {
 proc ::gpg::ExecGPG {token args} {
     Debug 1 $args
 
+    # Add common --no-tty, --quiet, --output -, --charset utf-8 arguments
+
+    set args [linsert $args 0 --no-tty --quiet --output - --charset utf-8]
+
     # Set --textmode option before calling CExecGPG to make it simpler.
 
     set textmode [Get $token -property textmode]
@@ -1201,7 +1208,7 @@ proc ::gpg::ExecGPG {token args} {
         set args [linsert $args 0 --no-textmode]
     }
 
-    if {[::info proc [namespace current]::CExecGPG] ne ""} {
+    if {[::info commands [namespace current]::CExecGPG] ne ""} {
 
         # C-based GPG invocation will use pipes instead of temporary files,
         # so in case of decryption or verification of a detached signature
@@ -1284,16 +1291,16 @@ proc ::gpg::ExecGPG {token args} {
         set args [linsert $args end -]
     }
 
-    # Add common --no-tty, --quiet, --output -, --status-fd arguments, and
+    # Add common --status-fd argument, and
     # --command-fd if there's no --batch option
 
-    set args [linsert $args 0 --no-tty --quiet --output - --charset utf-8 --status-fd 2]
+    set args [linsert $args 0 --status-fd 2]
 
     if {[lsearch -exact $args --batch] < 0} {
         set args [linsert $args 0 --command-fd 0]
-        set command 1
+        set batch 0
     } else {
-        set command 0
+        set batch 1
     }
 
     set pList [pipe]
@@ -1314,7 +1321,7 @@ proc ::gpg::ExecGPG {token args} {
     close $pWrite
     close $qWrite
 
-    if {$command} {
+    if {!$batch} {
         # Return channels in order: temporary file name, stdin, stdout,
         # stderr, status-fd, command-fd
 
@@ -1410,6 +1417,7 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
                     puts $command_fd \
                          [eval $pcb [list [list token $token \
                                                 description $desc]]]
+		    flush $command_fd
                 }
             }
             NEED_PASSPHRASE_SYM {
@@ -1422,6 +1430,7 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
                     puts $command_fd \
                          [eval $pcb [list [list token $token \
                                                 description ENTER]]]
+		    flush $command_fd
                 }
             }
             KEYEXPIRED {
