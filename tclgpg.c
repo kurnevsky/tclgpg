@@ -175,13 +175,16 @@ static int Gpg_Exec(ClientData  unused,
             argv[argc++] = "--status-fd";
             sprintf(stsChannelName, "%d", stspipe[1]);
             argv[argc++] = stsChannelName;
-            argv[argc++] = "--enable-special-filenames";
 
             if (!batch) {
                 close(cmdpipe[1]);
                 argv[argc++] = "--command-fd";
                 sprintf(cmdChannelName, "%d", cmdpipe[0]);
                 argv[argc++] = cmdChannelName;
+            }
+
+            if (decrypt || verify) {
+                argv[argc++] = "--enable-special-filenames";
             }
 
             for (i = 2; i < objc; i++) {
