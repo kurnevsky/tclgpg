@@ -10,6 +10,9 @@
 
 	* tclgpg.c, tclgpg.tcl: Code cleanup.
 
+	* tclgpg.c: Add --enable-special-filenames options only if these
+	  special filenames are actually used.
+
 2008-10-28  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Made the first gpg call use auto_execok.
