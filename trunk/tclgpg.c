@@ -67,12 +67,12 @@ Tcl_Obj *CloseAndCreateChan(Tcl_Interp *interp,
                             int         cpipe,
                             int         dpipe,
                             int         readOrWrite) {
-        Tcl_Channel chan;
+    Tcl_Channel chan;
 
-        close(cpipe);
-        chan = Tcl_MakeFileChannel((ClientData) dpipe, readOrWrite);
-        Tcl_RegisterChannel(interp, chan);
-        return Tcl_NewStringObj(Tcl_GetChannelName(chan),-1);
+    close(cpipe);
+    chan = Tcl_MakeFileChannel((ClientData) dpipe, readOrWrite);
+    Tcl_RegisterChannel(interp, chan);
+    return Tcl_NewStringObj(Tcl_GetChannelName(chan),-1);
 }
 
 /* Gpg_Exec --
@@ -97,162 +97,166 @@ static int Gpg_Exec(ClientData  unused,
                     Tcl_Interp *interp,
                     int         objc,
                     Tcl_Obj    *CONST objv[]) {
-    char *executable, *tmp;
-    int status;
-    pid_t pid;
-    int inpipe[2], outpipe[2], errpipe[2], stspipe[2], cmdpipe[2], msgpipe[2];
+    char    *executable, *tmp;
+    int      status;
+    pid_t    pid;
+    int      inpipe[2], outpipe[2], errpipe[2], stspipe[2], cmdpipe[2],
+             msgpipe[2];
     Tcl_Obj *resultPtr;
-    int argc, i, decrypt, verify, batch;
-    char **argv;
-    char stsChannelName[MAXCNAME], cmdChannelName[MAXCNAME], msgChannelName[MAXCNAME];
+    int      argc, i, decrypt, verify, batch;
+    char   **argv;
+    char     stsChannelName[MAXCNAME], cmdChannelName[MAXCNAME],
+             msgChannelName[MAXCNAME];
 
     Tcl_ResetResult(interp);
 
     if (objc == 1) {
-        Tcl_AppendResult (interp, "usage: ", Tcl_GetString(objv[0]),
-                                  " executable ?args?", NULL);
+        Tcl_AppendResult(interp, "usage: ", Tcl_GetString(objv[0]),
+                                 " executable ?args?", NULL);
         return TCL_ERROR;
-    } else {
-        Tcl_AppendResult(interp, Tcl_GetString(objv[0]), ": ", NULL);
+    }
 
-        pipe(inpipe);
-        pipe(outpipe);
-        pipe(errpipe);
-        pipe(stspipe);
+    Tcl_AppendResult(interp, Tcl_GetString(objv[0]), ": ", NULL);
 
-        decrypt = 0;
-        verify = 0;
-        batch = 0;
+    pipe(inpipe);
+    pipe(outpipe);
+    pipe(errpipe);
+    pipe(stspipe);
+
+    decrypt = 0;
+    verify = 0;
+    batch = 0;
+
+    for (i = 2; i < objc; i++) {
+        tmp = Tcl_GetString(objv[i]);
+
+        if (strcmp(tmp, "--decrypt") == 0) {
+            decrypt = 1;
+        } else if (strcmp(tmp, "--verify") == 0) {
+            verify = 1;
+        } else if (strcmp(tmp, "--batch") == 0) {
+            batch = 1;
+        }
+    }
+
+    if (!batch) {
+        pipe(cmdpipe);
+    }
+
+    if (decrypt || verify) {
+        pipe(msgpipe);
+    }
+
+    if ((pid = fork()) < 0) {
+        Tcl_AppendResult(interp, "can't fork", NULL);
+        return TCL_ERROR;
+    }
+    
+    if (pid == 0) {
+        /* child: another fork and exit */
+
+        if ((pid = fork()) < 0)
+            _exit(1);
+        else if (pid > 0)
+            _exit(0);
+
+        /* grandchild */
+
+        CloseDup(inpipe[1], inpipe[0], 0);
+        CloseDup(outpipe[0], outpipe[1], 1);
+        CloseDup(errpipe[0], errpipe[1], 2);
+
+        close(stspipe[0]);
+
+        executable = Tcl_GetString(objv[1]);
+
+        argv = (char **) ckalloc((objc + 16) * sizeof(char *));
+
+        argc = 0;
+
+        argv[argc++] = executable;
+        argv[argc++] = "--status-fd";
+        sprintf(stsChannelName, "%d", stspipe[1]);
+        argv[argc++] = stsChannelName;
+
+        if (!batch) {
+            close(cmdpipe[1]);
+            argv[argc++] = "--command-fd";
+            sprintf(cmdChannelName, "%d", cmdpipe[0]);
+            argv[argc++] = cmdChannelName;
+        }
+
+        if (decrypt || verify) {
+            argv[argc++] = "--enable-special-filenames";
+        }
 
         for (i = 2; i < objc; i++) {
-            tmp = Tcl_GetString(objv[i]);
-
-            if (strcmp(tmp, "--decrypt") == 0) {
-                decrypt = 1;
-            } else if (strcmp(tmp, "--verify") == 0) {
-                verify = 1;
-            } else if (strcmp(tmp, "--batch") == 0) {
-                batch = 1;
-            }
-        }
-
-        if (!batch) {
-            pipe(cmdpipe);
+            argv[argc++] = Tcl_GetString(objv[i]);
         }
 
         if (decrypt || verify) {
-            pipe(msgpipe);
+            close(msgpipe[1]);
+            sprintf(msgChannelName, "-&%d", msgpipe[0]);
+            argv[argc++] = msgChannelName;
         }
 
-        if ((pid = fork()) < 0) {
-            Tcl_AppendResult (interp, "can't fork", NULL);
-            return TCL_ERROR;
-        }
-        
-        if (pid == 0) {
-            /* child: another fork and exit */
-
-            if ((pid = fork()) < 0)
-                _exit(1);
-            else if (pid > 0)
-                _exit(0);
-
-            /* grandchild */
-
-            CloseDup(inpipe[1], inpipe[0], 0);
-            CloseDup(outpipe[0], outpipe[1], 1);
-            CloseDup(errpipe[0], errpipe[1], 2);
-
-            close(stspipe[0]);
-
-            executable = Tcl_GetString(objv[1]);
-
-            argv = (char **) ckalloc((objc + 16) * sizeof(char *));
-
-            argc = 0;
-
-            argv[argc++] = executable;
-            argv[argc++] = "--status-fd";
-            sprintf(stsChannelName, "%d", stspipe[1]);
-            argv[argc++] = stsChannelName;
-
-            if (!batch) {
-                close(cmdpipe[1]);
-                argv[argc++] = "--command-fd";
-                sprintf(cmdChannelName, "%d", cmdpipe[0]);
-                argv[argc++] = cmdChannelName;
-            }
-
-            if (decrypt || verify) {
-                argv[argc++] = "--enable-special-filenames";
-            }
-
-            for (i = 2; i < objc; i++) {
-                argv[argc++] = Tcl_GetString(objv[i]);
-            }
-
-            if (decrypt || verify) {
-                close(msgpipe[1]);
-                sprintf(msgChannelName, "-&%d", msgpipe[0]);
-                argv[argc++] = msgChannelName;
-            }
-
-            if (verify) {
-                argv[argc++] = "-";
-            }
-
-            argv[argc++] = NULL;
-
-            execv(executable, argv);
-
-            _exit(1);
+        if (verify) {
+            argv[argc++] = "-";
         }
 
-        if (waitpid(pid, &status, 0) < 0) {
-            Tcl_AppendResult (interp, "can't waitpid", NULL);
-            return TCL_ERROR;
-        }
+        argv[argc++] = NULL;
 
-        if (WIFSIGNALED(status)) {
-            Tcl_AppendResult (interp, "child is terminated by a signal", NULL);
-            return TCL_ERROR;
-        } else if (WIFEXITED(status)) {
-            if (WEXITSTATUS(status)) {
-                Tcl_AppendResult (interp, "child is exited with nonzero code", NULL);
-                return TCL_ERROR;
-            }
-        } else {
-            Tcl_AppendResult (interp, "child is exited abnormally", NULL);
-            return TCL_ERROR;
-        }
+        execv(executable, argv);
 
-        resultPtr = Tcl_NewObj();
-
-        Tcl_ListObjAppendElement(NULL, resultPtr,
-                                 CloseAndCreateChan(interp, inpipe[0],
-                                                    inpipe[1], TCL_WRITABLE));
-        Tcl_ListObjAppendElement(NULL, resultPtr,
-                                 CloseAndCreateChan(interp, outpipe[1],
-                                                    outpipe[0], TCL_READABLE));
-        Tcl_ListObjAppendElement(NULL, resultPtr,
-                                 CloseAndCreateChan(interp, errpipe[1],
-                                                    errpipe[0], TCL_READABLE));
-        Tcl_ListObjAppendElement(NULL, resultPtr,
-                                 CloseAndCreateChan(interp, stspipe[1],
-                                                    stspipe[0], TCL_READABLE));
-        if (!batch) {
-            Tcl_ListObjAppendElement(NULL, resultPtr,
-                                     CloseAndCreateChan(interp, cmdpipe[0],
-                                                        cmdpipe[1], TCL_WRITABLE));
-        }
-        if (decrypt || verify) {
-            Tcl_ListObjAppendElement(NULL, resultPtr,
-                                     CloseAndCreateChan(interp, msgpipe[0],
-                                                        msgpipe[1], TCL_WRITABLE));
-        }
-        Tcl_SetObjResult(interp, resultPtr);
-        return TCL_OK;
+        _exit(1);
     }
+
+    /* pid > 0 */
+
+    if (waitpid(pid, &status, 0) < 0) {
+        Tcl_AppendResult(interp, "can't waitpid", NULL);
+        return TCL_ERROR;
+    }
+
+    if (WIFSIGNALED(status)) {
+        Tcl_AppendResult(interp, "child is terminated by a signal", NULL);
+        return TCL_ERROR;
+    } else if (WIFEXITED(status)) {
+        if (WEXITSTATUS(status)) {
+            Tcl_AppendResult(interp, "child is exited with nonzero code", NULL);
+            return TCL_ERROR;
+        }
+    } else {
+        Tcl_AppendResult(interp, "child is exited abnormally", NULL);
+        return TCL_ERROR;
+    }
+
+    resultPtr = Tcl_NewObj();
+
+    Tcl_ListObjAppendElement(NULL, resultPtr,
+                             CloseAndCreateChan(interp, inpipe[0],
+                                                inpipe[1], TCL_WRITABLE));
+    Tcl_ListObjAppendElement(NULL, resultPtr,
+                             CloseAndCreateChan(interp, outpipe[1],
+                                                outpipe[0], TCL_READABLE));
+    Tcl_ListObjAppendElement(NULL, resultPtr,
+                             CloseAndCreateChan(interp, errpipe[1],
+                                                errpipe[0], TCL_READABLE));
+    Tcl_ListObjAppendElement(NULL, resultPtr,
+                             CloseAndCreateChan(interp, stspipe[1],
+                                                stspipe[0], TCL_READABLE));
+    if (!batch) {
+        Tcl_ListObjAppendElement(NULL, resultPtr,
+                                 CloseAndCreateChan(interp, cmdpipe[0],
+                                                    cmdpipe[1], TCL_WRITABLE));
+    }
+    if (decrypt || verify) {
+        Tcl_ListObjAppendElement(NULL, resultPtr,
+                                 CloseAndCreateChan(interp, msgpipe[0],
+                                                    msgpipe[1], TCL_WRITABLE));
+    }
+    Tcl_SetObjResult(interp, resultPtr);
+    return TCL_OK;
 }
 
 /* Tclgpg_Init --
