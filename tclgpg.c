@@ -170,7 +170,9 @@ static int Gpg_Exec(ClientData  unused,
 
         executable = Tcl_GetString(objv[1]);
 
-        argv = (char **) ckalloc((objc + 16) * sizeof(char *));
+        argv = (char **) attemptckalloc((objc + 16) * sizeof(char *));
+
+        if (argv == NULL) _exit(1);
 
         argc = 0;
 

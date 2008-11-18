@@ -13,6 +13,8 @@
 	* tclgpg.c: Add --enable-special-filenames options only if these
 	  special filenames are actually used.
 
+	* tclgpg.c: Added check if the memory for gpg options is allocated.
+
 2008-10-28  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Made the first gpg call use auto_execok.
