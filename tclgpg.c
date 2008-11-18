@@ -64,9 +64,9 @@ void CloseDup(int cpipe,
  */
 
 Tcl_Obj *CloseAndCreateChan(Tcl_Interp *interp,
-                            int cpipe,
-                            int dpipe,
-                            int readOrWrite) {
+                            int         cpipe,
+                            int         dpipe,
+                            int         readOrWrite) {
         Tcl_Channel chan;
 
         close(cpipe);
@@ -165,40 +165,40 @@ static int Gpg_Exec(ClientData  unused,
 
             close(stspipe[0]);
 
-	    executable = Tcl_GetString(objv[1]);
+            executable = Tcl_GetString(objv[1]);
 
-	    argv = (char **) ckalloc((objc + 16) * sizeof(char *));
+            argv = (char **) ckalloc((objc + 16) * sizeof(char *));
 
-	    argc = 0;
+            argc = 0;
 
-	    argv[argc++] = executable;
-	    argv[argc++] = "--status-fd";
-	    sprintf(stsChannelName, "%d", stspipe[1]);
-	    argv[argc++] = stsChannelName;
-	    argv[argc++] = "--enable-special-filenames";
+            argv[argc++] = executable;
+            argv[argc++] = "--status-fd";
+            sprintf(stsChannelName, "%d", stspipe[1]);
+            argv[argc++] = stsChannelName;
+            argv[argc++] = "--enable-special-filenames";
 
-	    if (!batch) {
+            if (!batch) {
                 close(cmdpipe[1]);
-		argv[argc++] = "--command-fd";
-		sprintf(cmdChannelName, "%d", cmdpipe[0]);
-		argv[argc++] = cmdChannelName;
-	    }
-
-	    for (i = 2; i < objc; i++) {
-		argv[argc++] = Tcl_GetString(objv[i]);
+                argv[argc++] = "--command-fd";
+                sprintf(cmdChannelName, "%d", cmdpipe[0]);
+                argv[argc++] = cmdChannelName;
             }
 
-	    if (decrypt || verify) {
+            for (i = 2; i < objc; i++) {
+                argv[argc++] = Tcl_GetString(objv[i]);
+            }
+
+            if (decrypt || verify) {
                 close(msgpipe[1]);
-		sprintf(msgChannelName, "-&%d", msgpipe[0]);
-		argv[argc++] = msgChannelName;
-	    }
+                sprintf(msgChannelName, "-&%d", msgpipe[0]);
+                argv[argc++] = msgChannelName;
+            }
 
-	    if (verify) {
-		argv[argc++] = "-";
-	    }
+            if (verify) {
+                argv[argc++] = "-";
+            }
 
-	    argv[argc++] = NULL;
+            argv[argc++] = NULL;
 
             execv(executable, argv);
 

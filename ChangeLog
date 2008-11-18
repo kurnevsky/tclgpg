@@ -8,6 +8,8 @@
 	* tclgpg.c: Moved memory allocation for gpg options to a short living
 	  grandchild, making its releasing unnecessary.
 
+	* tclgpg.c, tclgpg.tcl: Code cleanup.
+
 2008-10-28  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Made the first gpg call use auto_execok.
