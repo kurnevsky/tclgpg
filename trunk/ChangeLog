@@ -1,3 +1,10 @@
+2008-11-18  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.c, tclgpg.tcl, Makefile: Added a wrapper around gpg call
+	  to make use of pipes (and therefore of TclX or Tcl 8.6) and use
+	  of temporary files unnecessary. (Unfinished yet, some resources
+	  cleanup and porting to Windows is needed).
+
 2008-10-28  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Made the first gpg call use auto_execok.
