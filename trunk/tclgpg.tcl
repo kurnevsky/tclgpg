@@ -12,11 +12,11 @@
 package require Tcl 8.4
 
 if {[catch {load [file join [file dirname [info script]] \
-			    tclgpg[info sharedlibextension]]} res]} {
+                            tclgpg[info sharedlibextension]]} res]} {
     if {[package vsatisfies $::tcl_version 8.6]} {
-	interp alias {} pipe {} chan pipe
+        interp alias {} pipe {} chan pipe
     } elseif {[catch {package require pipe}]} {
-	package require Tclx
+        package require Tclx
     }
 }
 
@@ -1008,12 +1008,12 @@ proc ::gpg::Parse {gpgOutput} {
 
 proc ::gpg::ParseRecord {fields} {
     switch -- [lindex $fields 0] {
-	pub -
-	sec -
+        pub -
+        sec -
         crt -
         crs -
-	sub -
-	ssb {
+        sub -
+        ssb {
             # pub: public key
             # sec: secret key
             # crt: X.509 certificate
@@ -1034,7 +1034,7 @@ proc ::gpg::ParseRecord {fields} {
             lappend result key-capability [lindex $fields 11]
             return $result
         }
-	uid {
+        uid {
             # user id (only field 10 is used)
             set userid [string map {\\x3a :} [lindex $fields 9]]
             if {[regexp {^(.*\S)\s*\((.*)\)\s*<(.*)>$} $userid -> \
@@ -1048,7 +1048,7 @@ proc ::gpg::ParseRecord {fields} {
                 return [list userid $userid]
             }
         }
-	uat {
+        uat {
             # user attribute (same as user id except for field 10)
         }
         sig {
@@ -1057,12 +1057,12 @@ proc ::gpg::ParseRecord {fields} {
         rev {
             # revocation signature
         }
-	fpr {
+        fpr {
             # fingerprint: (fingerprint is in field 10)
             set fingerprint [lindex $fields 9]
             return [list fingerprint $fingerprint]
         }
-	pkd {
+        pkd {
             # public key data (special field format)
         }
         grp {
@@ -1085,7 +1085,7 @@ proc ::gpg::ParseRecord {fields} {
 
 proc ::gpg::Trust {code} {
     switch -- $code {
-	o {
+        o {
             # Unknown (this key is new to the system)
             return {validity unknown}
         }
@@ -1093,45 +1093,45 @@ proc ::gpg::Trust {code} {
             # The key is invalid (e.g. due to a missing self-signature)
             return {key-invalid 1}
         }
-	d {
+        d {
             # The key has been disabled
-	    # (deprecated - use the 'D' in field 12 instead)
+            # (deprecated - use the 'D' in field 12 instead)
             return {key-disabled 1}
         }
-	r {
+        r {
             # The key has been revoked
             return {key-revoked 1}
         }
-	e {
+        e {
             # The key has expired
             return {key-expired 1}
         }
-	- {
+        - {
             # Unknown trust (i.e. no value assigned)
             return {validity unknown}
         }
-	q {
+        q {
             # Undefined trust
-	    # '-' and 'q' may safely be treated as the same
-	    # value for most purposes
+            # '-' and 'q' may safely be treated as the same
+            # value for most purposes
             return {validity undefined}
         }
-	n {
+        n {
             # Don't trust this key at all
             return {validity never}
         }
-	m {
+        m {
             # There is marginal trust in this key
             return {validity marginal}
         }
-	f {
+        f {
             # The key is fully trusted
             return {validity full}
         }
-	u {
+        u {
             # The key is ultimately trusted.  This often means
-	    # that the secret key is available, but any key may
-	    # be marked as ultimately trusted.
+            # that the secret key is available, but any key may
+            # be marked as ultimately trusted.
             return {validity ultimate}
         }
     }
@@ -1139,21 +1139,21 @@ proc ::gpg::Trust {code} {
 
 proc ::gpg::Algorithm {code} {
     switch -- $code {
- 	1 -
+         1 -
         2 -
         3 {
             # RSA
             return RSA
         }
-	16 {
+        16 {
             # Elgamal (encrypt only)
             return ElG
         }
-	17 {
+        17 {
             # DSA (sometimes called DH, sign only)
             return DSA
         }
-	20 {
+        20 {
             # Elgamal (sign and encrypt - don't use them!)
             return ElG
         }
@@ -1417,7 +1417,7 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
                     puts $command_fd \
                          [eval $pcb [list [list token $token \
                                                 description $desc]]]
-		    flush $command_fd
+                    flush $command_fd
                 }
             }
             NEED_PASSPHRASE_SYM {
@@ -1430,7 +1430,7 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
                     puts $command_fd \
                          [eval $pcb [list [list token $token \
                                                 description ENTER]]]
-		    flush $command_fd
+                    flush $command_fd
                 }
             }
             KEYEXPIRED {
