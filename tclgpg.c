@@ -97,13 +97,13 @@ static int Gpg_Exec(ClientData  unused,
                     Tcl_Interp *interp,
                     int         objc,
                     Tcl_Obj    *CONST objv[]) {
-    char *executable;
+    char *executable, *tmp;
     int status;
     pid_t pid;
     int inpipe[2], outpipe[2], errpipe[2], stspipe[2], cmdpipe[2], msgpipe[2];
     Tcl_Obj *resultPtr;
     int argc, i, decrypt, verify, batch;
-    char **argv, **argv1;
+    char **argv;
     char stsChannelName[MAXCNAME], cmdChannelName[MAXCNAME], msgChannelName[MAXCNAME];
 
     Tcl_ResetResult(interp);
@@ -120,57 +120,29 @@ static int Gpg_Exec(ClientData  unused,
         pipe(errpipe);
         pipe(stspipe);
 
-        executable = Tcl_GetString(objv[1]);
-
-        argv = (char **) ckalloc((objc + 16) * sizeof(char *));
-
-        argc = 2;
-        argv1 = argv + 2;
-
-        argv[argc++] = executable;
-        argv[argc++] = "--status-fd";
-        sprintf(stsChannelName, "%d", stspipe[1]);
-        argv[argc++] = stsChannelName;
-        argv[argc++] = "--enable-special-filenames";
-
         decrypt = 0;
         verify = 0;
         batch = 0;
 
         for (i = 2; i < objc; i++) {
-            argv[argc] = Tcl_GetString(objv[i]);
+            tmp = Tcl_GetString(objv[i]);
 
-            if (strcmp(argv[argc], "--decrypt") == 0) {
+            if (strcmp(tmp, "--decrypt") == 0) {
                 decrypt = 1;
-            } else if (strcmp(argv[argc], "--verify") == 0) {
+            } else if (strcmp(tmp, "--verify") == 0) {
                 verify = 1;
-            } else if (strcmp(argv[argc], "--batch") == 0) {
+            } else if (strcmp(tmp, "--batch") == 0) {
                 batch = 1;
             }
-
-            argc++;
         }
 
         if (!batch) {
             pipe(cmdpipe);
-            argv[0] = executable;
-            argv[1] = "--command-fd";
-            sprintf(cmdChannelName, "%d", cmdpipe[0]);
-            argv[2] = cmdChannelName;
-            argv1 = argv;
         }
 
         if (decrypt || verify) {
             pipe(msgpipe);
-            sprintf(msgChannelName, "-&%d", msgpipe[0]);
-            argv[argc++] = msgChannelName;
         }
-
-        if (verify) {
-            argv[argc++] = "-";
-        }
-
-        argv[argc++] = NULL;
 
         if ((pid = fork()) < 0) {
             Tcl_AppendResult (interp, "can't fork", NULL);
@@ -190,15 +162,45 @@ static int Gpg_Exec(ClientData  unused,
             CloseDup(inpipe[1], inpipe[0], 0);
             CloseDup(outpipe[0], outpipe[1], 1);
             CloseDup(errpipe[0], errpipe[1], 2);
+
             close(stspipe[0]);
-            if (!batch) {
+
+	    executable = Tcl_GetString(objv[1]);
+
+	    argv = (char **) ckalloc((objc + 16) * sizeof(char *));
+
+	    argc = 0;
+
+	    argv[argc++] = executable;
+	    argv[argc++] = "--status-fd";
+	    sprintf(stsChannelName, "%d", stspipe[1]);
+	    argv[argc++] = stsChannelName;
+	    argv[argc++] = "--enable-special-filenames";
+
+	    if (!batch) {
                 close(cmdpipe[1]);
-            }
-            if (decrypt || verify) {
-                close(msgpipe[1]);
+		argv[argc++] = "--command-fd";
+		sprintf(cmdChannelName, "%d", cmdpipe[0]);
+		argv[argc++] = cmdChannelName;
+	    }
+
+	    for (i = 2; i < objc; i++) {
+		argv[argc++] = Tcl_GetString(objv[i]);
             }
 
-            execv(executable, argv1);
+	    if (decrypt || verify) {
+                close(msgpipe[1]);
+		sprintf(msgChannelName, "-&%d", msgpipe[0]);
+		argv[argc++] = msgChannelName;
+	    }
+
+	    if (verify) {
+		argv[argc++] = "-";
+	    }
+
+	    argv[argc++] = NULL;
+
+            execv(executable, argv);
 
             _exit(1);
         }
