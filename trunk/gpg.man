@@ -23,7 +23,7 @@ Create a new GPG context token.
 [call [cmd "\$token"] \
         [arg "-operation set"] \
         [arg "-property property"] \
-	[opt [arg "-value value"]]]
+        [opt [arg "-value value"]]]
 
 Set a specified property.
 
@@ -36,21 +36,27 @@ Get a specified property.
 [call [cmd "\$token"] \
         [arg "-operation list-keys"] \
         [opt [arg "-patterns patterns"]] \
-	[opt [arg "-secretonly boolean"]]]
+        [opt [arg "-secretonly boolean"]] \
+        [opt [arg "-command command"]]]
 
 Return list of key tokens which match any of a specified patterns in the
 patterns list [arg patterns].
 
 [call [cmd "\$token"] \
         [arg "-operation info-key"] \
-	[arg "-key keytoken"]]
+        [arg "-key keytoken"]]
 
 Return a serialized array of key properties.
+
+[nl]
+
+The following three operations are implemented only for compatibility with
+TclGPGME. Otherwise using operation [arg list-keys] is preferable.
 
 [call [cmd "\$token"] \
         [arg "-operation start-key"] \
         [opt [arg "-patterns patterns"]] \
-	[opt [arg "-secretonly boolean"]]]
+        [opt [arg "-secretonly boolean"]]]
 
 Start searching for keys which match any of a specified patterns in the
 patterns list [arg patterns].
@@ -67,30 +73,30 @@ Stop searching for keys.
 
 [call [cmd "\$token"] \
         [arg "-operation encrypt"] \
-	[arg "-input input"] \
-	[opt [arg "-recipients recipients"]] \
-	[opt [arg "-sign boolean"]]]
+        [arg "-input input"] \
+        [opt [arg "-recipients recipients"]] \
+        [opt [arg "-sign boolean"]]]
 
 Encrypt message (using either symmetric or asymmetric algorithm).
 
 [call [cmd "\$token"] \
         [arg "-operation decrypt"] \
-	[arg "-input input"] \
-	[opt [arg "-checkstatus boolean"]]]
+        [arg "-input input"] \
+        [opt [arg "-checkstatus boolean"]]]
 
 Decrypt message.
 
 [call [cmd "\$token"] \
         [arg "-operation sign"] \
-	[arg "-input input"] \
-	[opt [arg "-mode mode"]]]
+        [arg "-input input"] \
+        [opt [arg "-mode mode"]]]
 
 Sign message.
 
 [call [cmd "\$token"] \
         [arg "-operation verify"] \
-	[arg "-signature signature"] \
-	[opt [arg "-input input"]]]
+        [arg "-signature signature"] \
+        [opt [arg "-input input"]]]
 
 Verify signature.
 
@@ -100,8 +106,8 @@ Create recipients token.
 
 [call [cmd "\$recipient"] \
         [arg "-operation add"] \
-	[arg "-name name"] \
-	[opt [arg "-validity valid"]]]
+        [arg "-name name"] \
+        [opt [arg "-validity valid"]]]
 
 Add name to a recipient token.
 
@@ -130,8 +136,9 @@ $ctx -operation encrypt -input Hello
 }]
 
 [section "AUTHORS"]
-Sergei Golovan
+Sergei Golovan,
 Antoni Grzymala
 
 [keywords Tcl GnuPG]
+[comment { vim: set ft=tcl ts=8 sw=4 sts=4 et: }]
 [manpage_end]

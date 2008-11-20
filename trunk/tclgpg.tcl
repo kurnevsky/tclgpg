@@ -688,9 +688,12 @@ proc ::gpg::Decrypt {token args} {
 #       -secretonly bool    (optional, defaults to false) A boolean which shows
 #                           if secret keys should be found. If false then only
 #                           public keys are searched.
+#       -command            A command to call back with a list of keys appended.
+#                           If present then an asynchronous mode is enabled.
 #
 # Result:
-#       A list of matching keys.
+#       A list of matching keys in synchronous mode or a token (stdout channel
+#       name of the executed GPG process) in asynchronous mode.
 #
 # Side effects:
 #       A global keys array is populated by keys which match given patterns.
@@ -701,6 +704,7 @@ proc ::gpg::ListKeys {token args} {
 
     set patterns {}
     set operation --list-keys
+    set commands {}
 
     foreach {key val} $args {
         switch -- $key {
@@ -716,6 +720,9 @@ proc ::gpg::ListKeys {token args} {
                                     must be boolean" $val]
                 }
             }
+            -command {
+                set commands [list $val]
+            }
             default {
                 return -code error \
                        [format "unknown option \"%s\":\
@@ -726,7 +733,7 @@ proc ::gpg::ListKeys {token args} {
         }
     }
 
-    return [FindKeys $token $operation $patterns]
+    return [FindKeys $token $operation $commands $patterns]
 }
 
 # ::gpg::StartKey --
@@ -785,7 +792,7 @@ proc ::gpg::StartKey {token args} {
         }
     }
 
-    set state(keylist) [FindKeys $token $operation $patterns]
+    set state(keylist) [FindKeys $token $operation {} $patterns]
     set state(keyidx) -1
 
     return
@@ -896,17 +903,21 @@ proc ::gpg::InfoKey {token args} {
 #       token               A GPG context token created in ::gpg::context.
 #       operation           --list-keys for public keys list or
 #                           --list-secret-keys for secret keys list.
+#       commands            A list of commands to call back (its length may be
+#                           0 or 1). If it's empty then a synchronous mode is
+#                           enabled.
 #       patterns            A list of patterns to search for in keys available
 #                           to GnuPG. Patterns may contain key ID, fingerprint,
 #                           user ID etc. See gpg(1) manual page for details.
 #
 # Result:
-#       A list of keys which match given patterns.
+#       A list of keys which match given patterns in a synchronous mode or a
+#       stdout channel name of the executed GPG process in asynchronous mode.
 #
 # Side effects:
 #       A global keys array is populated by keys which match given patterns.
 
-proc ::gpg::FindKeys {token operation patterns} {
+proc ::gpg::FindKeys {token operation commands patterns} {
 
     set channels [eval ExecGPG $token --batch \
                                       --with-colons \
@@ -915,25 +926,44 @@ proc ::gpg::FindKeys {token operation patterns} {
                                       --with-fingerprint \
                                       $operation -- $patterns]
 
-    foreach {filename stdin_fd stdout_fd stderr_fd status_fd} $channels break
-    # TODO: Do we have to set encoding to UTF-8?
-    set res [Parse [read $stdout_fd]]
-    catch {close $stdin_fd}
-    catch {close $stdout_fd}
-    catch {close $stderr_fd}
-    catch {close $status_fd}
-    return $res
+    set channels [lrange $channels 1 end]
+
+    # $fd is a stdout of executed GPG process
+    set fd [lindex $channels 1]
+    fconfigure $fd -encoding utf-8
+
+    if {[llength $commands] == 0} {
+        # Synchronous mode, so make channel blocking and parse its contents
+
+        fconfigure $fd -blocking true
+        return [Parse $channels $commands]
+    } else {
+        # Asynchronous mode, so make channel nonblocking and parse its contents
+        # eventually
+        fconfigure $fd -blocking false
+        fileevent $fd readable [namespace code [list Parse $channels $commands]]
+        return $fd
+    }
 }
 
-proc ::gpg::Parse {gpgOutput} {
+proc ::gpg::Parse {channels commands} {
     variable keys
 
-    set res {}
-    set key {}
-    set subkey {}
-    set subkeys {}
-    set st ""
-    foreach line [split $gpgOutput "\n"] {
+    set fd [lindex $channels 1]
+    variable $fd
+    upvar 0 $fd state
+
+    if {![::info exists state(res)]} {
+        set state(res) {}
+        set state(key) {}
+        set state(subkey) {}
+        set state(subkeys) {}
+        set state(st) ""
+        set state(channels) $channels
+        set state(commands) $commands
+    }
+
+    while {[gets $fd line] >= 0} {
         set fields [split $line ":"]
         switch -- [lindex $fields 0] {
             pub -
@@ -942,68 +972,83 @@ proc ::gpg::Parse {gpgOutput} {
             crs {
                 # Store the current key
 
-                if {[llength $subkey] > 0} {
-                    lappend subkeys $subkey
+                if {[llength $state(subkey)] > 0} {
+                    lappend state(subkeys) $state(subkey)
                 }
-                if {[llength $subkeys] > 0} {
-                    lappend key subkeys $subkeys
+                if {[llength $state(subkeys)] > 0} {
+                    lappend state(key) subkeys $state(subkeys)
                 }
-                array set tmp $key
+                array set tmp $state(key)
                 if {[::info exists tmp(fingerprint)]} {
-                    set keys($tmp(fingerprint)) $key
-                    lappend res $tmp(fingerprint)
+                    set keys($tmp(fingerprint)) $state(key)
+                    lappend state(res) $tmp(fingerprint)
                 }
                 array unset tmp
 
                 # Start a new key
 
-                set st key
-                set key {}
-                set subkey {}
-                set subkeys {}
+                set state(st) key
+                set state(key) {}
+                set state(subkey) {}
+                set state(subkeys) {}
             }
             sub -
             ssb {
                 # Store the current subkey
 
-                if {[llength $subkey] > 0} {
-                    lappend subkeys $subkey
+                if {[llength $state(subkey)] > 0} {
+                    lappend state(subkeys) $state(subkey)
                 }
 
                 # Start a new subkey
 
-                set st subkey
-                set subkey {}
+                set state(st) subkey
+                set state(subkey) {}
             }
             sig {
                 # Signature
             }
         }
-        switch -- $st {
+        switch -- $state(st) {
             key {
-                set key [concat $key [ParseRecord $fields]]
+                set state(key) [concat $state(key) [ParseRecord $fields]]
             }
             subkey {
-                set subkey [concat $subkey [ParseRecord $fields]]
+                set state(subkey) [concat $state(subkey) [ParseRecord $fields]]
             }
         }
     }
 
-    # Store the last key
+    if {[eof $fd] || [llength $commands] == 0} {
+        # Store the last key
 
-    if {[llength $subkey] > 0} {
-        lappend subkeys $subkey
-    }
-    if {[llength $subkeys] > 0} {
-        lappend key subkeys $subkeys
-    }
-    array set tmp $key
-    if {[::info exists tmp(fingerprint)]} {
-        set keys($tmp(fingerprint)) $key
-        lappend res $tmp(fingerprint)
+        if {[llength $state(subkey)] > 0} {
+            lappend state(subkeys) $state(subkey)
+        }
+        if {[llength $state(subkeys)] > 0} {
+            lappend state(key) state(subkeys) $state(subkeys)
+        }
+        array set tmp $state(key)
+        if {[::info exists tmp(fingerprint)]} {
+            set keys($tmp(fingerprint)) $state(key)
+            lappend state(res) $tmp(fingerprint)
+        }
+
+        set res $state(res)
+        unset state
+
+        foreach ch $channels {
+            catch {close $ch}
+        }
+
+        if {[llength $commands] == 0} {
+            return $res
+        } else {
+            uplevel #0 [lindex $commands 0] [list $res]
+        }
     }
 
-    return $res
+    return
 }
 
 proc ::gpg::ParseRecord {fields} {
@@ -1517,7 +1562,7 @@ proc ::gpg::UseGPG {token operation channels {input ""}} {
                 }
                 set sig(key) [lindex $fields 11]
                 if {![::info exists keys($sig(key))]} {
-                    FindKeys $token --list-keys $sig(key)
+                    FindKeys $token --list-keys {} $sig(key)
                 }
             }
             TRUST_UNDEFINED {
