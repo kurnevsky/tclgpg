@@ -1,3 +1,8 @@
+2008-11-20  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl, gpg.man: Implemented asynchronous mode for list-keys
+	  operation. Cancelling the operation isn't possible yet.
+
 2008-11-18  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.c, tclgpg.tcl, Makefile: Added a wrapper around gpg call
