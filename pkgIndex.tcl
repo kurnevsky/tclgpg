@@ -4,7 +4,6 @@
 #       for Tcl.
 #
 # Copyright (c) 2008 Sergei Golovan <sgolovan@nes.ru>
-#                    Antoni Grzymala <antoni@chopin.edu.pl>
 #
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAMER OF ALL WARRANTIES.

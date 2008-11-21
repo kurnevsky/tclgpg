@@ -1,3 +1,12 @@
+2008-11-21  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl, gpg.man: Implemented asynchronous mode for sign, verify,
+	  encrypt and decrypt operations. Cancelling the operations isn't
+	  possible yet.
+
+	* *: Removed Antony from authors list until he will have time to
+	  actually contribute.
+
 2008-11-20  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, gpg.man: Implemented asynchronous mode for list-keys
