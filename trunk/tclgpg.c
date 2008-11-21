@@ -1,8 +1,7 @@
 /* tclgpgme.c --
  *      Tcl interface to GNU Privacy Guard -- wrapper around gpg call.
  *
- * Copyright (c) 2008 Sergei Golovan <sgolovan@nes.ru>,
- *                    Antoni Grzymala <antoni@chopin.edu.pl>
+ * Copyright (c) 2008 Sergei Golovan <sgolovan@nes.ru>
  *
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAMER OF ALL WARRANTIES.

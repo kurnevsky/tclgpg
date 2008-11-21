@@ -1,7 +1,7 @@
 [comment {-*- tcl -*- doctools manpage}]
 [comment {$Id$}]
 [manpage_begin gpg n 1.0]
-[copyright {2008 Sergei Golovan <sgolovan@nes.ru>, Antoni Grzymala <antoni@chopin.edu.pl>}]
+[copyright {2008 Sergei Golovan <sgolovan@nes.ru>}]
 [moddesc {Tcl interface to GNU Privacy Guard}]
 [titledesc {Tcl Interfcae to GnuPG}]
 [require Tcl 8.4]
@@ -75,28 +75,32 @@ Stop searching for keys.
         [arg "-operation encrypt"] \
         [arg "-input input"] \
         [opt [arg "-recipients recipients"]] \
-        [opt [arg "-sign boolean"]]]
+        [opt [arg "-sign boolean"]] \
+        [opt [arg "-command command"]]]
 
 Encrypt message (using either symmetric or asymmetric algorithm).
 
 [call [cmd "\$token"] \
         [arg "-operation decrypt"] \
         [arg "-input input"] \
-        [opt [arg "-checkstatus boolean"]]]
+        [opt [arg "-checkstatus boolean"]] \
+        [opt [arg "-command command"]]]
 
 Decrypt message.
 
 [call [cmd "\$token"] \
         [arg "-operation sign"] \
         [arg "-input input"] \
-        [opt [arg "-mode mode"]]]
+        [opt [arg "-mode mode"]] \
+        [opt [arg "-command command"]]]
 
 Sign message.
 
 [call [cmd "\$token"] \
         [arg "-operation verify"] \
         [arg "-signature signature"] \
-        [opt [arg "-input input"]]]
+        [opt [arg "-input input"]] \
+        [opt [arg "-command command"]]]
 
 Verify signature.
 
@@ -136,8 +140,7 @@ $ctx -operation encrypt -input Hello
 }]
 
 [section "AUTHORS"]
-Sergei Golovan,
-Antoni Grzymala
+Sergei Golovan
 
 [keywords Tcl GnuPG]
 [comment { vim: set ft=tcl ts=8 sw=4 sts=4 et: }]
