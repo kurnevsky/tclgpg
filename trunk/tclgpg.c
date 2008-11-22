@@ -261,7 +261,7 @@ static int Gpg_Exec(ClientData  unused,
     return TCL_OK;
 }
 
-/* Tclgpg_Init --
+/* Gpg_Init --
  *
  *      Initialize the library and register ::gpg::CExecGPG command.
  *
@@ -275,7 +275,7 @@ static int Gpg_Exec(ClientData  unused,
  *      A new Tcl command is created.
  */
 
-int Tclgpg_Init (Tcl_Interp *interp) {
+int Gpg_Init (Tcl_Interp *interp) {
     if (Tcl_InitStubs (interp, "8.0", 0) == NULL)
         return TCL_ERROR;
 
