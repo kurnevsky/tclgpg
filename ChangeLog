@@ -7,6 +7,12 @@
 	* configure.in: Removed tclgpg.tcl from Tcl sources as it is a
 	  generated file.
 
+	* Makefile.in, aclocal.m4, configure.in: Added all generated files
+	  (not only Makefile and pkgIndex.tcl) to CONFIG_CLEAN_FILES, so they
+	  will be removed on make distclean. Also, overridden
+	  TEA_ADD_TCL_SOURCES macro to succeed if a file with suffix .in
+	  exists.
+
 2008-11-21  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, gpg.man: Implemented asynchronous mode for sign, verify,

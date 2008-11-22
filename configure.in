@@ -58,7 +58,7 @@ TEA_ADD_INCLUDES([])
 TEA_ADD_LIBS([])
 TEA_ADD_CFLAGS([])
 TEA_ADD_STUB_SOURCES([])
-TEA_ADD_TCL_SOURCES([])
+TEA_ADD_TCL_SOURCES([tclgpg.tcl])
 
 #--------------------------------------------------------------------
 # A few miscellaneous platform-specific items:
@@ -160,4 +160,4 @@ TEA_PROG_TCLSH
 # which require substituting th AC variables in.  Include these here.
 #--------------------------------------------------------------------
 
-AC_OUTPUT([Makefile tclgpg.tcl pkgIndex.tcl])
+LOCAL_AC_OUTPUT([Makefile tclgpg.tcl pkgIndex.tcl])
