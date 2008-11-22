@@ -1,3 +1,9 @@
+2008-11-22  Sergei Golovan  <sgolovan@nes.ru>
+
+	* *: Started to convert the package to a proper TEA package.
+
+	* tclgpg.c: Included missing header.
+
 2008-11-21  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, gpg.man: Implemented asynchronous mode for sign, verify,
