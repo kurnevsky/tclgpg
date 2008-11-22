@@ -10,6 +10,6 @@
 #
 # $Id$
 
-package ifneeded gpg 1.0 [list source [file join $dir tclgpg.tcl]]
+package ifneeded gpg @PACKAGE_VERSION@ [list source [file join $dir tclgpg.tcl]]
 
-# vim:ts=8:sw=4:sts=4:et
+# vim:ft=tcl:ts=8:sw=4:sts=4:et

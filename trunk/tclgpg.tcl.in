@@ -1,4 +1,5 @@
-# tclgpgme.tcl --
+# tclgpg.tcl --
+#
 #        Tcl interface to GNU Privacy Guard.
 #
 # Copyright (c) 2008 Sergei Golovan <sgolovan@nes.ru>
@@ -11,7 +12,7 @@
 package require Tcl 8.4
 
 if {[catch {load [file join [file dirname [info script]] \
-                            tclgpg[info sharedlibextension]]} res]} {
+                            @PKG_LIB_FILE@]}]} {
     if {[package vsatisfies $::tcl_version 8.6]} {
         interp alias {} pipe {} chan pipe
     } elseif {[catch {package require pipe}]} {
@@ -949,6 +950,9 @@ proc ::gpg::FindKeys {token operation commands patterns} {
 proc ::gpg::Parse {channels commands} {
     variable keys
 
+    # This proc may be called several times as a fileevent, so we have to
+    # maintain a state.
+
     set fd [lindex $channels 1]
     variable $fd
     upvar 0 $fd state
@@ -1444,6 +1448,9 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
 
     foreach {filename stdin_fd stdout_fd stderr_fd status_fd command_fd} \
             $channels break
+
+    # This proc may be called several times as a fileevent, so we have to
+    # maintain a state.
 
     variable $status_fd
     upvar 0 $status_fd state
@@ -2106,4 +2113,4 @@ proc ::gpg::Debug {level msg} {
     return
 }
 
-# vim:ts=8:sw=4:sts=4:et
+# vim:ft=tcl:ts=8:sw=4:sts=4:et
