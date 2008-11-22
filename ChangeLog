@@ -13,6 +13,13 @@
 	  TEA_ADD_TCL_SOURCES macro to succeed if a file with suffix .in
 	  exists.
 
+	* configure.in, pkgIndex.tcl.in, tclgpg.tcl: Used an alternative method
+	  of loading the library, so using generated tclgpg.tcl isn't necessary
+	  anymore.
+
+	* tclgpg.c: Changed the name of init function because of library name
+	  change.
+
 2008-11-21  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, gpg.man: Implemented asynchronous mode for sign, verify,

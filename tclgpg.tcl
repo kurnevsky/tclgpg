@@ -11,8 +11,7 @@
 
 package require Tcl 8.4
 
-if {[catch {load [file join [file dirname [info script]] \
-                            @PKG_LIB_FILE@]}]} {
+if {[::info commands ::gpg::CExecGPG] eq ""} {
     if {[package vsatisfies $::tcl_version 8.6]} {
         interp alias {} pipe {} chan pipe
     } elseif {[catch {package require pipe}]} {
@@ -33,8 +32,6 @@ if {[package vsatisfies $gpgVersion 2.0] && \
     return -code error \
            "GnuPG 2 cannot be used without gpg-agent"
 }
-
-package provide gpg 1.0
 
 namespace eval ::gpg {
     variable validities [list unknown undefined never marginal full ultimate]

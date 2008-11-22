@@ -160,4 +160,4 @@ TEA_PROG_TCLSH
 # which require substituting th AC variables in.  Include these here.
 #--------------------------------------------------------------------
 
-LOCAL_AC_OUTPUT([Makefile tclgpg.tcl pkgIndex.tcl])
+LOCAL_AC_OUTPUT([Makefile pkgIndex.tcl])
