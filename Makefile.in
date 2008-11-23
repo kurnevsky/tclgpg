@@ -197,9 +197,9 @@ libraries:
 # end user machine when building from source.
 #========================================================================
 
-doc: gpg.n
+doc: doc/gpg.n
 
-gpg.n: gpg.man
+doc/gpg.n: doc/gpg.man
 	mpexpand nroff $< $@
 
 install: all install-binaries install-libraries install-doc
