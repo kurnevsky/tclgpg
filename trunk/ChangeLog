@@ -1,3 +1,7 @@
+2008-11-23  Sergei Golovan  <sgolovan@nes.ru>
+
+	* doc/gpg.man, Makefile.in: Moved manpage to doc subdirectory.
+
 2008-11-22  Sergei Golovan  <sgolovan@nes.ru>
 
 	* *: Started to convert the package to a proper TEA package.
