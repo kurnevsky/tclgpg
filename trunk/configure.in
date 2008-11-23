@@ -1,5 +1,17 @@
 #!/bin/bash -norc
 #
+# configure.in --
+#
+#	This file is an autoconf script template for TclGPG. It was initially
+#	borrowed from
+#	http://tcl.cvs.sourceforge.net/viewvc/*checkout*/tcl/sampleextension/
+#	and modified.
+#
+# Copyright (c) 2008 Sergei Golovan <sgolovan@nes.ru>
+#
+# See the file "license.terms" for information on usage and redistribution
+# of this file, and for a DISCLAIMER OF ALL WARRANTIES.
+#
 # $Id$
 
 #-----------------------------------------------------------------------

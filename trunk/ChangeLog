@@ -5,6 +5,9 @@
 	* Makefile.in, configure.in: Made building C-helper which spawns gpg
 	  process optional (thanks to Konstantin Khomoutov).
 
+	* Makefile.in, aclocal.m4, configure.in: Added copyright info and
+	  removed unnecessary autoconf macro.
+
 2008-11-22  Sergei Golovan  <sgolovan@nes.ru>
 
 	* *: Started to convert the package to a proper TEA package.

@@ -1,38 +1,22 @@
+# aclocal.m4 --
+#
+#	This file contains autoconf macros specific for TclGPG. It was
+#	initially borrowed from
+#	http://tcl.cvs.sourceforge.net/viewvc/*checkout*/tcl/sampleextension/
+#	and modified.
+#
+# Copyright (c) 2008 Sergei Golovan <sgolovan@nes.ru>
+#
+# See the file "license.terms" for information on usage and redistribution
+# of this file, and for a DISCLAIMER OF ALL WARRANTIES.
+#
+# $Id$
+
 #
 # Include the TEA standard macro set
 #
 
 builtin(include,tclconfig/tcl.m4)
-
-#
-# Add here whatever m4 macros you want to define for your package
-#
-
-#------------------------------------------------------------------------
-# TEA_ADD_TCL_SOURCES --
-#
-#	Specify one or more Tcl source files.  These should be platform
-#	independent runtime files.
-#
-# Arguments:
-#	one or more file names
-#
-# Results:
-#
-#	Defines and substs the following vars:
-#		PKG_TCL_SOURCES
-#------------------------------------------------------------------------
-AC_DEFUN([TEA_ADD_TCL_SOURCES], [
-    vars="$@"
-    for i in $vars; do
-	# check for existence, be strict because it is installed
-	if test ! -f "${srcdir}/$i" -a ! -f "${srcdir}/$i.in" ; then
-	    AC_MSG_ERROR([could not find tcl source file '${srcdir}/$i' or '${srcdir}/$i.in'])
-	fi
-	PKG_TCL_SOURCES="$PKG_TCL_SOURCES $i"
-    done
-    AC_SUBST(PKG_TCL_SOURCES)
-])
 
 #------------------------------------------------------------------------
 # LOCAL_AC_OUTPUT --
