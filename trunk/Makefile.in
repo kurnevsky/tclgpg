@@ -193,10 +193,13 @@ libraries:
 # end user machine when building from source.
 #========================================================================
 
-doc: doc/gpg.n
+doc: doc/gpg.n doc/gpg.html
 
 doc/gpg.n: doc/gpg.man
 	dtplite -o $@ nroff $<
+
+doc/gpg.html: doc/gpg.man
+	dtplite -o $@ html $<
 
 install: all install-binaries install-libraries install-doc
 
