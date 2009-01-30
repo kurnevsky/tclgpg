@@ -3,7 +3,7 @@
 [manpage_begin gpg n 1.0]
 [copyright {2008-2009 Sergei Golovan <sgolovan@nes.ru>}]
 [moddesc {Tcl interface to GNU Privacy Guard}]
-[titledesc {Tcl Interfcae to GnuPG}]
+[titledesc {Tcl Interface to GnuPG}]
 [require Tcl 8.4]
 [require Tclx]
 [require gpg 1.0]
