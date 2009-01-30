@@ -5,6 +5,8 @@
 
 	* doc/gpg.man: Replaced deprecated [nl] command by [para].
 
+	* Makefile.in: Added building HTML doc.
+
 2009-01-17  Sergei Golovan  <sgolovan@nes.ru>
 
 	* pkgIndex.tcl.in: Fixed package loading if it is located in a
