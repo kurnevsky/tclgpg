@@ -48,7 +48,7 @@ patterns list [arg patterns].
 
 Return a serialized array of key properties.
 
-[nl]
+[para]
 
 The following three operations are implemented only for compatibility with
 TclGPGME. Otherwise using operation [arg list-keys] is preferable.
