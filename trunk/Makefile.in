@@ -196,7 +196,7 @@ libraries:
 doc: doc/gpg.n
 
 doc/gpg.n: doc/gpg.man
-	mpexpand nroff $< $@
+	dtplite -o $@ nroff $<
 
 install: all install-binaries install-libraries install-doc
 
