@@ -1688,7 +1688,11 @@ proc ::gpg::FinishGPG {token operation channels input} {
                 [lindex $state(sig:summary) 0] eq "green"} {
             lappend state(sig:summary) valid
         }
-        lappend state(signatures) [array get state sig:*]
+        set signature {}
+        foreach {key val} [array get state sig:*] {
+            lappend signature [string range $key 4 end] $val
+        }
+        lappend state(signatures) $signature
         array unset state sig:*
     }
 
@@ -1696,7 +1700,7 @@ proc ::gpg::FinishGPG {token operation channels input} {
     foreach s $state(signatures) {
         array unset sig
         array set sig $s
-        lappend statuses $sig(sig:status)
+        lappend statuses $sig(status)
     }
     set statuses [lsort -unique $statuses]
     switch -- [llength $statuses] {
