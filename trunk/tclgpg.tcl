@@ -11,7 +11,7 @@
 
 package require Tcl 8.4
 
-if {[::info commands ::gpg::CExecGPG] eq ""} {
+if {[info commands ::gpg::CExecGPG] eq ""} {
     if {[package vsatisfies $::tcl_version 8.6]} {
         interp alias {} pipe {} chan pipe
     } elseif {[catch {package require pipe}]} {
@@ -29,15 +29,14 @@ if {[llength [auto_execok gpg]] == 0 || \
 if {[package vsatisfies $gpgVersion 2.0] && \
         ![info exists ::env(GPG_AGENT_INFO)]} {
     unset gpgVersion
-    return -code error \
-           "GnuPG 2 cannot be used without gpg-agent"
+    return -code error "GnuPG 2 cannot be used without gpg-agent"
 }
 
 namespace eval ::gpg {
     variable validities [list unknown undefined never marginal full ultimate]
 
     variable Version $::gpgVersion
-    unset gpgVersion
+    unset ::gpgVersion
 
     # Variable to store public keys
     variable keys
@@ -46,79 +45,24 @@ namespace eval ::gpg {
 }
 
 # ::gpg::executable --
-# Purpose:
-#  Finds a GnuPG executable in the system using the same rules [exec] does.
-# Returns:
-#  Full pathname of the first occurence of the GnuPG executable found
-#  or an empty string if the search yielded no results.
+#
+#       Find a GnuPG executable in the system using the same rules [exec] does.
+#
+# Arguments:
+#       None.
+#
+# Result:
+#       Full pathname of the first occurence of the GnuPG executable found
+#       or an empty string if the search yielded no results.
+#
 # Side effects:
-#  Updates the global Tcl array auto_execs on success (see library(3tcl)).
+#       Updates the global Tcl array auto_execs on success (see library(3tcl)).
+
 proc ::gpg::executable {} {
     lindex [auto_execok gpg] 0
 }
 
-# ::gpg::info --
-#
-
-proc ::gpg::info {args} {
-    variable validities
-
-    switch -- [llength $args] {
-        0 {
-            return [list datatypes signature-status signature-modes \
-                         attributes validity capabilities protocols \
-                         keylist-modes]
-        }
-        1 {
-            set option [lindex $args 0]
-            switch -- $option {
-                datatypes {
-                    return [list none mem fd file cb]
-                }
-                signature-status {
-                    return [list none good bad nokey nosig error diff \
-                                 expired expiredkey revokedkey]
-                }
-                signature-modes {
-                    return [list normal detach clear]
-                }
-                attributes {
-                    return [list keyid fingerprint algorithm length created \
-                                 expires owner-trust userid name email comment \
-                                 validity level type is-secret key-revoked \
-                                 key-invalid uid-revoked uid-invalid \
-                                 key-capability key-expired key-disabled \
-                                 serial issuer chainid signature-status \
-                                 error-token signature-summary]
-                }
-                validity {
-                    return $validities
-                }
-                capabilities {
-                    return [list encrypt sign certify]
-                }
-                protocols {
-                    return [list openpgp cms auto]
-                }
-                keylist-modes {
-                    return [list local extern sigs]
-                }
-                default {
-                    return -code error \
-                           [format "bad option \"%s\": must be datatypes,\
-                                    signature-status, signature-modes,\
-                                    attributes, validity, capabilities,\
-                                    protocols, or keylist-modes" $option]
-                }
-            }
-        }
-        default {
-            return -code error [format "usage: %s option" [lindex [::info level 0] 0]]
-        }
-    }
-}
-
-# ::gpg::context --
+# ::gpg::new --
 #
 #       Create a new GPG context token.
 #
@@ -132,10 +76,10 @@ proc ::gpg::info {args} {
 #       A new procedure and a state variable are created. Also deleting of
 #       the procedure is traced to unset the state variable.
 
-proc ::gpg::context {} {
+proc ::gpg::new {} {
     variable id
 
-    if {![::info exists id]} {
+    if {![info exists id]} {
         set id 0
     }
 
@@ -148,31 +92,32 @@ proc ::gpg::context {} {
     # Default settings
     set state(armor) false
     set state(textmode) false
+    set state(encoding) [encoding system]
 
-    proc $token {args} "eval {[namespace current]::Exec} {$token} \$args"
-
-    trace add command $token delete [namespace code [list Free $token]]
+    proc $token {args} "eval {[namespace current]::Exec $token} \$args"
 
     return $token
 }
 
-# ::gpg::Free --
+# ::gpg::free --
 #
-#       Unset state variable corresponding to a context token.
+#       Unset state variable corresponding to a context token and destroy
+#       the token procedure.
 #
 # Arguments:
 #       token       A GPG context token created in ::gpg::context.
-#       args        (unused) Arguments added by trace.
 #
 # Result
 #       An empty string.
 #
 # Side effects:
-#       A state variable is destroyed.
+#       A state variable and token procedure are destroyed.
 
-proc ::gpg::Free {token args} {
+proc ::gpg::Free {token} {
     variable $token
     upvar 0 $token state
+
+    rename $token ""
 
     catch {unset state}
     return
@@ -181,12 +126,12 @@ proc ::gpg::Free {token args} {
 # ::gpg::Exec --
 #
 #       Execute a GPG context operation. This procedure is invoked when a user
-#       calls [$token -operation ...].
+#       calls [$token operation ...].
 #
 # Arguments:
 #       token       A GPG context token created in ::gpg::context.
-#       args        Arguments serialized array. It must contain pair
-#                   -operation <op>. The other arguments are operation-
+#       operation   An operation to perform
+#       args        Arguments serialized array. The arguments are operation-
 #                   dependent.
 #
 # Result:
@@ -195,45 +140,32 @@ proc ::gpg::Free {token args} {
 # Side effects:
 #       The side effects of a corresponding operation.
 
-proc ::gpg::Exec {token args} {
-    set newArgs {}
-    foreach {key val} $args {
-        switch -- $key {
-            -operation { set op $val }
-            default    { lappend newArgs $key $val }
-        }
-    }
-
-    if {![::info exists op]} {
-        return -code error "missing operation"
-    }
-
-    switch -- $op {
-        cancel    { set res [eval [list Cancel   $token] $newArgs] }
-        wait      { set res [eval [list Wait     $token] $newArgs] }
-        get       { set res [eval [list Get      $token] $newArgs] }
-        set       { set res [eval [list Set      $token] $newArgs] }
-        list-keys { set res [eval [list ListKeys $token] $newArgs] }
-        start-key { set res [eval [list StartKey $token] $newArgs] }
-        next-key  { set res [eval [list NextKey  $token] $newArgs] }
-        done-key  { set res [eval [list DoneKey  $token] $newArgs] }
-        info-key  { set res [eval [list InfoKey  $token] $newArgs] }
-        encrypt   { set res [eval [list Encrypt  $token] $newArgs] }
-        sign      { set res [eval [list Sign     $token] $newArgs] }
-        verify    { set res [eval [list Verify   $token] $newArgs] }
-        decrypt   { set res [eval [list Decrypt  $token] $newArgs] }
+proc ::gpg::Exec {token operation args} {
+    switch -- $operation {
+        cancel    { set res [eval [list Cancel   $token] $args] }
+        wait      { set res [eval [list Wait     $token] $args] }
+        set       { set res [eval [list Set      $token] $args] }
+        unset     { set res [eval [list Unset    $token] $args] }
+        list-keys { set res [eval [list ListKeys $token] $args] }
+        info-key  { set res [eval [list InfoKey  $token] $args] }
+        encrypt   { set res [eval [list Encrypt  $token] $args] }
+        sign      { set res [eval [list Sign     $token] $args] }
+        verify    { set res [eval [list Verify   $token] $args] }
+        decrypt   { set res [eval [list Decrypt  $token] $args] }
+        free      { set res [eval [list Free     $token] $args] }
         default   {
             return -code error \
                    [format "unknown operation \"%s\":\
-                            must be %s" $op [JoinOptions {cancel wait get set
-                                                          encrypt decrypt sign
-                                                          verify start-key
-                                                          next-key done-key
-                                                          info-key}]]
+                            must be %s" $operation \
+                            [JoinOptions {cancel wait set unset encrypt decrypt
+                                          sign verify list-keys info-key
+                                          free}]]
         }
     }
 
-    set state(last-op-info) $op
+    if {![string equal $operation free]} {
+        set state(last-op-info) $operation
+    }
     return $res
 }
 
@@ -270,7 +202,6 @@ proc ::gpg::Set {token args} {
 
     Debug 2 "$token $args"
 
-    set value ""
     foreach {key val} $args {
         switch -- $key {
             -property { set prop  $val }
@@ -278,39 +209,47 @@ proc ::gpg::Set {token args} {
             default   {
                 return -code error \
                        [format "unknown option \"%s\":\
-                                must be %s" $op [JoinOptions {-operation
-                                                              -property
-                                                              -value}]]
+                                must be %s" $key [JoinOptions {-property
+                                                               -value}]]
             }
         }
     }
 
     variable properties [list protocol armor textmode number-of-certs \
                               keylistmode passphrase-callback \
-                              progress-callback idle-callback signers]
+                              progress-callback idle-callback signers \
+                              encoding]
 
-    if {![::info exists prop]} {
+    if {![info exists prop]} {
         return -code error \
                [format "missing property:\
                         must be %s" $prop [JoinOptions $properties]]
     } elseif {[lsearch -exact $properties $prop] >= 0} {
-        switch -- $prop {
-            armor -
-            textmode {
-                if {[string is boolean -strict $value]} {
+        if {![info exists value]} {
+            if {[info exists state($prop)]} {
+                return $state($prop)
+            } else {
+                return -code error [format "property \"%s\" isn't set" $prop]
+            }
+        } else {
+            switch -- $prop {
+                armor -
+                textmode {
+                    if {[string is boolean -strict $value]} {
+                        set state($prop) $value
+                    } else {
+                        return -code error \
+                               [format "invalid %s value \"%s\":\
+                                        must be boolean" $prop $value]
+                    }
+                }
+                default {
+                    # TODO: Checking other properties values
                     set state($prop) $value
-                } else {
-                    return -code error \
-                           [format "invalid %s value \"%s\":\
-                                    must be boolean" $prop $value]
                 }
             }
-            default {
-                # TODO: Checking other properties values
-                set state($prop) $value
-            }
+            return $state($prop)
         }
-        return
     } else {
         return -code error \
                [format "unknown property \"%s\":\
@@ -318,23 +257,21 @@ proc ::gpg::Set {token args} {
     }
 }
 
-# ::gpg::Get --
+# ::gpg::Unset --
 #
-#       Return the value of a given GPG context property.
+#       Unset a given GPG context property.
 #
 # Arguments:
 #       token           A GPG context token created in ::gpg::context.
 #       -property prop  A property name.
 #
 # Result:
-#       A given property value if it's set, or empty string if it's unset
-#       in case of success, or an error if a property is missing
-#       or unknown.
+#       Empty string or error if property is missing or unknown.
 #
 # Side effects:
-#       None.
+#       Property variable is unset.
 
-proc ::gpg::Get {token args} {
+proc ::gpg::Unset {token args} {
     variable $token
     upvar 0 $token state
 
@@ -346,8 +283,7 @@ proc ::gpg::Get {token args} {
             default   {
                 return -code error \
                        [format "unknown option \"%s\":\
-                                must be %s" $op [JoinOptions {-operation
-                                                              -property}]]
+                                must be %s" $key [JoinOptions {-property}]]
             }
         }
     }
@@ -355,23 +291,23 @@ proc ::gpg::Get {token args} {
     set properties [list protocol armor textmode number-of-certs \
                          keylistmode passphrase-callback \
                          progress-callback idle-callback signers \
-                         last-op-info]
+                         encoding last-op-info]
 
-    if {![::info exists prop]} {
+    if {![info exists prop]} {
         return -code error \
                [format "missing property:\
                         must be %s" $prop [JoinOptions $properties]]
     } elseif {[lsearch -exact $properties $prop] >= 0} {
-        if {[::info exists state($prop)]} {
-            return $state($prop)
-        } else {
-            return ""
+        if {[info exists state($prop)]} {
+            unset state($prop)
         }
     } else {
         return -code error \
                [format "unknown property \"%s\":\
                         must be %s" $prop [JoinOptions $properties]]
     }
+
+    return
 }
 
 # ::gpg::Sign --
@@ -404,19 +340,18 @@ proc ::gpg::Sign {token args} {
             default {
                 return -code error \
                        [format "unknown option \"%s\":\
-                                must be %s" $op [JoinOptions {-operation
-                                                              -input
-                                                              -mode
-                                                              -command}]]
+                                must be %s" $key [JoinOptions {-input
+                                                               -mode
+                                                               -command}]]
             }
         }
     }
 
-    if {![::info exists input]} {
+    if {![info exists input]} {
         return -code error "missing input to sign"
     }
 
-    if {[Get $token -property armor]} {
+    if {![catch {Set $token -property armor} armor] && $armor} {
         set params {--armor}
     } else {
         set params {--no-armor}
@@ -436,7 +371,10 @@ proc ::gpg::Sign {token args} {
     }
 
     array set tmp {}
-    foreach key [Get $token -property signers] {
+    if {[catch {Set $token -property signers} signers]} {
+        set signers {}
+    }
+    foreach key $signers {
         array unset tmp
         array set tmp [InfoKey $token -key $key]
         lappend params -u $tmp(keyid)
@@ -496,20 +434,19 @@ proc ::gpg::Encrypt {token args} {
             default {
                 return -code error \
                        [format "unknown option \"%s\":\
-                                must be %s" $op [JoinOptions {-operation
-                                                              -input
-                                                              -recipients
-                                                              -sign
-                                                              -command}]]
+                                must be %s" $key [JoinOptions {-input
+                                                               -recipients
+                                                               -sign
+                                                               -command}]]
             }
         }
     }
 
-    if {![::info exists input]} {
+    if {![info exists input]} {
         return -code error "missing input to encrypt"
     }
 
-    if {[Get $token -property armor]} {
+    if {![catch {Set $token -property armor} armor] && $armor} {
         set params {--armor}
     } else {
         set params {--no-armor}
@@ -518,16 +455,19 @@ proc ::gpg::Encrypt {token args} {
     if {$sign} {
         lappend params --sign
         array set tmp {}
-        foreach key [Get $token -property signers] {
+        if {[catch {Set $token -property signers} signers]} {
+            set signers {}
+        }
+        foreach key $signers {
             array unset tmp
             array set tmp [InfoKey $token -key $key]
             lappend params -u $tmp(keyid)
         }
     }
 
-    if {[::info exists recipients]} {
+    if {[info exists recipients]} {
         if {[RecipientCount $recipients] == 0} {
-            return -code error "no recipents in token"
+            return -code error "no recipients in token"
         }
 
         lappend params --encrypt
@@ -591,19 +531,18 @@ proc ::gpg::Verify {token args} {
             default    {
                 return -code error \
                        [format "unknown option \"%s\":\
-                                must be %s" $op [JoinOptions {-operation
-                                                              -signature
-                                                              -input
-                                                              -command}]]
+                                must be %s" $key [JoinOptions {-signature
+                                                               -input
+                                                               -command}]]
             }
         }
     }
 
-    if {![::info exists signature]} {
+    if {![info exists signature]} {
         return -code error "missing signature to verify"
     }
 
-    if {[::info exists input]} {
+    if {[info exists input]} {
         set gpgChannels [ExecGPG $token --verify -- $signature]
         return [UseGPG $token verify $commands $gpgChannels $input]
     } else {
@@ -653,15 +592,14 @@ proc ::gpg::Decrypt {token args} {
             default {
                 return -code error \
                        [format "unknown option \"%s\":\
-                                must be %s" $op [JoinOptions {-operation
-                                                              -input
-                                                              -checkstatus
-                                                              -command}]]
+                                must be %s" $key [JoinOptions {-input
+                                                               -checkstatus
+                                                               -command}]]
             }
         }
     }
 
-    if {![::info exists input]} {
+    if {![info exists input]} {
         return -code error "missing input to decrypt"
     }
 
@@ -723,8 +661,7 @@ proc ::gpg::ListKeys {token args} {
             default {
                 return -code error \
                        [format "unknown option \"%s\":\
-                                must be %s" $key [JoinOptions {-operation
-                                                               -patterns
+                                must be %s" $key [JoinOptions {-patterns
                                                                -secretonly
                                                                -command}]]
             }
@@ -732,119 +669,6 @@ proc ::gpg::ListKeys {token args} {
     }
 
     return [FindKeys $token $operation $commands $patterns]
-}
-
-# ::gpg::StartKey --
-#
-#       Start an element-by-element traversing through a key list.
-#
-# Arguments:
-#       token               A GPG context token created in ::gpg::context.
-#       -patterns patterns  A list of patterns to search for in keys available
-#                           to GnuPG. Patterns may contain key ID, fingerprint,
-#                           user ID etc. See gpg(1) manual page for details.
-#       -secretonly bool    (optional, defaults to false) A boolean which shows
-#                           if secret keys should be found. If false then only
-#                           public keys are searched.
-#
-# Result:
-#       Empty string or error if a search is already started earlier.
-#
-# Side effects:
-#       A global keys array is populated by keys which match given patterns.
-#       Also, NextKey becomes usable.
-
-proc ::gpg::StartKey {token args} {
-    variable $token
-    upvar 0 $token state
-
-    if {[::info exists state(keyidx)]} {
-        return -code error \
-               "already doing a key listing, end that one first"
-    }
-
-    set patterns {}
-    set operation --list-keys
-
-    foreach {key val} $args {
-        switch -- $key {
-            -patterns {
-                set patterns $val
-            }
-            -secretonly {
-                if {[string is true -strict $val]} {
-                    set operation --list-secret-keys
-                } elseif {![string is false -strict $val]} {
-                    return -code error \
-                           [format "invalid -secretonly value \"%s\":\
-                                    must be boolean" $val]
-                }
-            }
-            default {
-                return -code error \
-                       [format "unknown option \"%s\":\
-                                must be %s" $key [JoinOptions {-operation
-                                                               -patterns
-                                                               -secretonly}]]
-            }
-        }
-    }
-
-    set state(keylist) [FindKeys $token $operation {} $patterns]
-    set state(keyidx) -1
-
-    return
-}
-
-# ::gpg::NextKey --
-#
-#       Return the next element in a key search started by StartKey.
-#
-# Arguments:
-#       token               A GPG context token created in ::gpg::context.
-#
-# Result:
-#       A key fingerprint or empty string if a list is ended. Error is
-#       returned if a search wasn't started yet.
-#
-# Side effects:
-#       None.
-
-proc ::gpg::NextKey {token} {
-    variable $token
-    upvar 0 $token state
-
-    if {![::info exists state(keyidx)]} {
-        return -code error "not doing a key listing"
-    }
-
-    return [lindex $state(keylist) [incr state(keyidx)]]
-}
-
-# ::gpg::DoneKey --
-#
-#       Finish a key search started by StartKey.
-#
-# Arguments:
-#       token               A GPG context token created in ::gpg::context.
-#
-# Result:
-#       Empty string or error if a search isn't started yet.
-#
-# Side effects:
-#       Search is finished, so NextKey will return error.
-
-proc ::gpg::DoneKey {token} {
-    variable $token
-    upvar 0 $token state
-
-    if {![::info exists state(keyidx)]} {
-        return -code error "not doing a key listing"
-    }
-
-    unset state(keylist)
-    unset state(keyidx)
-    return
 }
 
 # ::gpg::InfoKey --
@@ -874,17 +698,16 @@ proc ::gpg::InfoKey {token args} {
             default {
                 return -code error \
                     [format "unknown option \"%s\":\
-                             must be %s" $key [JoinOptions {-operation
-                                                            -key}]]
+                             must be %s" $key [JoinOptions {-key}]]
             }
         }
     }
 
-    if {![::info exists fingerprint]} {
+    if {![info exists fingerprint]} {
         return -code error "missing key"
     }
 
-    if {[::info exists keys($fingerprint)]} {
+    if {[info exists keys($fingerprint)]} {
         return $keys($fingerprint)
     } else {
         return -code error "invalid key"
@@ -954,7 +777,7 @@ proc ::gpg::Parse {channels commands} {
     variable $fd
     upvar 0 $fd state
 
-    if {![::info exists state(res)]} {
+    if {![info exists state(res)]} {
         set state(res) {}
         set state(key) {}
         set state(subkey) {}
@@ -980,7 +803,7 @@ proc ::gpg::Parse {channels commands} {
                     lappend state(key) subkeys $state(subkeys)
                 }
                 array set tmp $state(key)
-                if {[::info exists tmp(fingerprint)]} {
+                if {[info exists tmp(fingerprint)]} {
                     set keys($tmp(fingerprint)) $state(key)
                     lappend state(res) $tmp(fingerprint)
                 }
@@ -1030,7 +853,7 @@ proc ::gpg::Parse {channels commands} {
             lappend state(key) state(subkeys) $state(subkeys)
         }
         array set tmp $state(key)
-        if {[::info exists tmp(fingerprint)]} {
+        if {[info exists tmp(fingerprint)]} {
             set keys($tmp(fingerprint)) $state(key)
             lappend state(res) $tmp(fingerprint)
         }
@@ -1244,7 +1067,9 @@ proc ::gpg::ExecGPG {token args} {
 
     # Set --textmode option before calling CExecGPG to make it simpler.
 
-    set textmode [Get $token -property textmode]
+    if {[catch {Set $token -property textmode} textmode]} {
+        set textmode false
+    }
 
     if {$textmode} {
         set args [linsert $args 0 --textmode]
@@ -1254,7 +1079,13 @@ proc ::gpg::ExecGPG {token args} {
         set args [linsert $args 0 --no-textmode]
     }
 
-    if {[::info commands [namespace current]::CExecGPG] ne ""} {
+    # Set proper encoding
+
+    if {[catch {Set $token -property encoding} encoding]} {
+        set encoding [encoding system]
+    }
+
+    if {[info commands [namespace current]::CExecGPG] ne ""} {
 
         # C-based GPG invocation will use pipes instead of temporary files,
         # so in case of decryption or verification of a detached signature
@@ -1268,6 +1099,8 @@ proc ::gpg::ExecGPG {token args} {
             set channels [eval CExecGPG [executable] $args]
             set input_fd [lindex $channels end]
 
+            fconfigure $input_fd -encoding $encoding
+
             if {$textmode} {
                 fconfigure $input_fd -translation crlf
             }
@@ -1275,10 +1108,25 @@ proc ::gpg::ExecGPG {token args} {
             puts -nonewline $input_fd $input
             close $input_fd
 
-            return [linsert [lrange $channels 0 end-1] 0 ""]
+            set channels [lrange $channels 0 end-1]
         } else {
-            return [linsert [eval CExecGPG [executable] $args] 0 ""]
+            set channels [eval CExecGPG [executable] $args]
         }
+
+        # stdin
+        fconfigure [lindex $channels 0] -encoding $encoding -buffering none
+        # stdout
+        fconfigure [lindex $channels 1] -encoding $encoding
+        # stderr
+        fconfigure [lindex $channels 2] -encoding utf-8
+        # status-fd
+        fconfigure [lindex $channels 3] -encoding utf-8
+        if {[llength $channels] == 5} {
+            # command-fd
+            fconfigure [lindex $channels 4] -encoding $encoding -buffering none
+        }
+
+        return [linsert $channels 0 ""]
     }
 
     # For decryption or verification of a detached signature we use a
@@ -1318,6 +1166,8 @@ proc ::gpg::ExecGPG {token args} {
         set name_fd [TempFile]
         foreach {filename fd} $name_fd break
 
+        fconfigure $input_fd -encoding $encoding
+
         if {$textmode} {
             fconfigure $fd -translation crlf
         }
@@ -1352,6 +1202,7 @@ proc ::gpg::ExecGPG {token args} {
 
     set pList [pipe]
     foreach {pRead pWrite} $pList break
+    fconfigure $pRead -encoding $encoding
 
     set qList [pipe]
     foreach {qRead qWrite} $qList break
@@ -1364,7 +1215,7 @@ proc ::gpg::ExecGPG {token args} {
     Debug 2 [linsert $args 0 [executable]]
 
     set fd [open |[linsert $args 0 [executable]] w]
-    fconfigure $fd -translation binary -buffering none
+    fconfigure $fd -encoding $encoding -buffering none
     close $pWrite
     close $qWrite
 
@@ -1414,13 +1265,10 @@ proc ::gpg::UseGPG {token operation commands channels {input ""}} {
         verify {
             # Here $input contains either a signature, or a signed material
             # if a signature is detached.
-            fconfigure $stdin_fd -encoding binary
             puts -nonewline $stdin_fd $input
             catch {close $stdin_fd}
         }
     }
-
-    fconfigure $status_fd -encoding utf-8
 
     if {[llength $commands] == 0} {
         # Synchronous mode, so make channel blocking and parse its contents
@@ -1454,7 +1302,7 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
 
     # Collect signatures if any (if operation is decrypt-check or verify)
 
-    if {![::info exists state(signatures)]} {
+    if {![info exists state(signatures)]} {
         set state(signatures) {}
     }
 
@@ -1474,54 +1322,46 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                 break
             }
             USERID_HINT {
-                set state(userid_hint) [join [lrange $fields 2 end]]
+                set state(userid_hint) [join [lrange $fields 3 end]]
             }
             NEED_PASSPHRASE {
                 if {![package vsatisfies $Version 2.0]} {
-                    if {![::info exists state(hint)]} {
-                        set state(hint) ENTER
+                    if {![info exists state(hint)]} {
+                        set state(hint) enter
                     } else {
-                        set state(hint) TRY_AGAIN
+                        set state(hint) try_again
                     }
-                    set pcb [Get $token -property passphrase-callback]
-                    if {$pcb eq ""} {
-                        CleanupGPG $channels
-                        if {[llength $commands] == 0} {
-                            return -code error "No passphrase"
-                        } else {
-                            uplevel #0 [lindex $commands 0] \
-                                       [list error "No passphrase"]
-                            return
-                        }
+                    if {[catch {Set $token -property passphrase-callback} pcb]} {
+                        NoPassphrase $channels $commands
                     }
-                    set desc \
-                        [join [list $state(hint) $state(userid_hint) \
-                                    [join [lrange $fields 2 end] " "]] \
-                              "\n"]
-                    Debug 2 $desc
-                    puts $command_fd \
-                         [eval $pcb [list [list token $token \
-                                                description $desc]]]
-                    flush $command_fd
+                    set arglist [list token $token \
+                                      hint $state(hint) \
+                                      userid $state(userid_hint) \
+                                      keyid [lindex $fields 2] \
+                                      subkeyid [lindex $fields 3]]
+                    Debug 2 $arglist
+                    if {[catch {eval $pcb [list $arglist]} passphrase]} {
+                        NoPassphrase $channels $commands
+                    } else {
+                        puts $command_fd $passphrase
+                        flush $command_fd
+                    }
                 }
             }
             NEED_PASSPHRASE_SYM {
                 if {![package vsatisfies $Version 2.0]} {
-                    set pcb [Get $token -property passphrase-callback]
-                    if {$pcb eq ""} {
-                        CleanupGPG $channels
-                        if {[llength $commands] == 0} {
-                            return -code error "No passphrase"
-                        } else {
-                            uplevel #0 [lindex $commands 0] \
-                                       [list error "No passphrase"]
-                            return
-                        }
+                    if {[catch {Set $token -property passphrase-callback} pcb]} {
+                        NoPassphrase $channels $commands
                     }
-                    puts $command_fd \
-                         [eval $pcb [list [list token $token \
-                                                description ENTER]]]
-                    flush $command_fd
+                    if {[catch {
+                            eval $pcb [list [list token $token \
+                                                  hint enter]]
+                         } passphrase]} {
+                        NoPassphrase $channels $commands
+                    } else {
+                        puts $command_fd $passphrase
+                        flush $command_fd
+                    }
                 }
             }
             KEYEXPIRED {
@@ -1619,7 +1459,7 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                     set state(sig:expires) [lindex $fields 5]
                 }
                 set state(sig:key) [lindex $fields 11]
-                if {![::info exists keys($state(sig:key))]} {
+                if {![info exists keys($state(sig:key))]} {
                     FindKeys $token --list-keys {} $state(sig:key)
                 }
             }
@@ -1670,6 +1510,16 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
     }
 
     return
+}
+
+proc ::gpg::NoPassphrase {channels commands} {
+    CleanupGPG $channels
+    if {[llength $commands] == 0} {
+        return -code error "No passphrase"
+    } else {
+        uplevel #0 [lindex $commands 0] [list error "No passphrase"]
+        return
+    }
 }
 
 proc ::gpg::FinishGPG {token operation channels input} {
@@ -1726,14 +1576,13 @@ proc ::gpg::FinishGPG {token operation channels input} {
             puts -nonewline $stdin_fd $input
             catch {close $stdin_fd}
 
-            if {![Get $token -property armor]} {
-                fconfigure $stdout_fd -translation binary
+            if {[catch {Set $token -property armor} armor] || !$armor} {
+                fconfigure $stdout_fd -translation lf
             }
 
             set data [read $stdout_fd]
         }
         decrypt {
-            fconfigure $stdout_fd -translation binary
             set plaintext [read $stdout_fd]
             set data [list plaintext $plaintext]
         }
@@ -1742,7 +1591,6 @@ proc ::gpg::FinishGPG {token operation channels input} {
             # "" means verifying non-detached signature, so gpg reports
             # the signed message to stdout.
 
-            fconfigure $stdout_fd -translation binary
             set plaintext [read $stdout_fd]
             set data [list plaintext $plaintext status $status \
                            signatures $state(signatures)]
@@ -1778,6 +1626,9 @@ proc ::gpg::CleanupGPG {channels} {
         file delete -force -- $filename
     }
 
+    # Clean up zombie which tclsh leaves when executes gpg in the background
+    catch {exec {}}
+
     return
 }
 
@@ -1798,7 +1649,7 @@ proc ::gpg::CleanupGPG {channels} {
 proc ::gpg::recipient {} {
     variable rid
 
-    if {![::info exists rid]} {
+    if {![info exists rid]} {
         set rid 0
     }
 
@@ -1808,30 +1659,29 @@ proc ::gpg::recipient {} {
 
     set state(recipients) {}
 
-    proc $token {args} "eval {[namespace current]::RecipientExec} {$token} \$args"
-
-    trace add command $token delete [namespace code [list RecipientFree $token]]
+    proc $token {args} "eval {[namespace current]::RecipientExec $token} \$args"
 
     return $token
 }
 
 # ::gpg::RecipientFree --
 #
-#       Unset state variable corresponding to a recipient token.
+#       Unset state variable and a procedure corresponding to a recipient token.
 #
 # Arguments:
 #       token       A recipient context token created in ::gpg::recipient.
-#       args        (unused) Arguments added by trace.
 #
 # Result
 #       An empty string.
 #
 # Side effects:
-#       A state variable is destroyed.
+#       A state variable and token procedure are destroyed.
 
-proc ::gpg::RecipientFree {token args} {
+proc ::gpg::RecipientFree {token} {
     variable $token
     upvar 0 $token state
+
+    rename $token ""
 
     catch {unset state}
     return
@@ -1840,12 +1690,12 @@ proc ::gpg::RecipientFree {token args} {
 # ::gpg::RecipientExec --
 #
 #       Execute a recipient operation. This procedure is invoked when a user
-#       calls [$token -operation ...] for a recipient token.
+#       calls [$token operation ...] for a recipient token.
 #
 # Arguments:
 #       token       A recipient token created in ::gpg::recipient.
-#       args        Arguments serialized array. It must contain pair
-#                   -operation <op>. The other arguments are operation-
+#       operation   A performed operation.
+#       args        Arguments serialized array. The arguments are operation-
 #                   dependent.
 #
 # Result:
@@ -1854,27 +1704,16 @@ proc ::gpg::RecipientFree {token args} {
 # Side effects:
 #       The side effects of a corresponding operation.
 
-proc ::gpg::RecipientExec {token args} {
-    set newArgs {}
-    foreach {key val} $args {
-        switch -- $key {
-            -operation { set op $val }
-            default { lappend newArgs $key $val }
-        }
-    }
-
-    if {![::info exists op]} {
-        return -code error "missing operation"
-    }
-
-    switch -- $op {
-        add   { return [eval [list RecipientAdd   $token] $newArgs] }
-        count { return [eval [list RecipientCount $token] $newArgs] }
-        list  { return [eval [list RecipientList  $token] $newArgs] }
+proc ::gpg::RecipientExec {token operation args} {
+    switch -- $operation {
+        add   { return [eval [list RecipientAdd   $token] $args] }
+        list  { return [eval [list RecipientList  $token] $args] }
+        free  { return [eval [list RecipientFree  $token] $args] }
         default {
             return -code error \
                    [format "bad operation \"%s\":\
-                            must be %s" $op [JoinOptions {add count list}]]
+                            must be %s" $operation [JoinOptions {add list
+                                                                 free}]]
         }
     }
 }
@@ -1907,14 +1746,13 @@ proc ::gpg::RecipientAdd {token args} {
             default {
                 return -code error \
                        [format "bad option \"$s\":\
-                                must be %s" $key [JoinOption {-operation
-                                                              -name
+                                must be %s" $key [JoinOption {-name
                                                               -validity}]]
             }
         }
     }
 
-    if {![::info exists name]} {
+    if {![info exists name]} {
         return -code error "-name option must be provided"
     }
 
@@ -1928,7 +1766,7 @@ proc ::gpg::RecipientAdd {token args} {
     return
 }
 
-# ::gpg::RecipentCount --
+# ::gpg::RecipientCount --
 #
 #       Return recipients count for recipient token.
 #
@@ -1948,7 +1786,7 @@ proc ::gpg::RecipientCount {token} {
     return [llength $state(recipients)]
 }
 
-# ::gpg::RecipentList --
+# ::gpg::RecipientList --
 #
 #       Return list of recipient names for recipient token.
 #
@@ -1972,7 +1810,7 @@ proc ::gpg::RecipientList {token} {
     return $recs
 }
 
-# ::gpg::RecipentFullList --
+# ::gpg::RecipientFullList --
 #
 #       Return list of pairs {recipient name, validity} for recipient token.
 #
@@ -2075,7 +1913,6 @@ proc ::gpg::TempFile {} {
 
         if {![file exists $newname]} {
             if {![catch {open $newname $access $permission} fd]} {
-                fconfigure $fd -translation binary
                 return [list $newname $fd]
             }
         }
@@ -2108,7 +1945,7 @@ proc ::gpg::Debug {level msg} {
     variable debug
 
     if {$debug >= $level} {
-        puts "[lindex [::info level -1] 0]: $msg"
+        puts "[lindex [info level -1] 0]: $msg"
     }
 
     return

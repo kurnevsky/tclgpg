@@ -1,3 +1,15 @@
+2009-08-03  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl, doc/gpg.man: Broke compatibility with TclGPGME by
+	  turning option -operation into a subcommand. Let password callback
+	  return break code which means no passphrase. Modified set command
+	  to query a given property if the value isn't specified. Added unset
+	  command. Removed start-key, next-key and done-key commands (in favor
+	  of list-keys).
+
+	* tclgpg.tcl: Added encoding property, so that data supplied to and
+	  received from GPG executable are encoded properly.
+
 2009-02-04  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed indices of returned serialised arrays.
