@@ -16,91 +16,72 @@ TclGPGME.
 [section "COMMANDS"]
 
 [list_begin definitions]
-[call [cmd "::gpg::context"]]
+[call [cmd "::gpg::new"]]
 
 Create a new GPG context token.
 
-[call [cmd "\$token"] \
-        [arg "-operation set"] \
-        [arg "-property property"] \
-        [opt [arg "-value value"]]]
+[call [cmd "\$token"] [arg "free"]]
 
-Set a specified property.
+Destroy GPG token and free its resources.
 
 [call [cmd "\$token"] \
-        [arg "-operation get"] \
+      [arg "set"] \
+      [arg "-property property"] \
+      [opt [arg "-value value"]]]
+
+Set or query a specified property.
+
+[call [cmd "\$token"] \
+        [arg "unset"] \
         [arg "-property property"]]
 
-Get a specified property.
+Unset a specified property.
 
 [call [cmd "\$token"] \
-        [arg "-operation list-keys"] \
-        [opt [arg "-patterns patterns"]] \
-        [opt [arg "-secretonly boolean"]] \
-        [opt [arg "-command command"]]]
+      [arg "list-keys"] \
+      [opt [arg "-patterns patterns"]] \
+      [opt [arg "-secretonly boolean"]] \
+      [opt [arg "-command command"]]]
 
 Return list of key tokens which match any of a specified patterns in the
 patterns list [arg patterns].
 
 [call [cmd "\$token"] \
-        [arg "-operation info-key"] \
-        [arg "-key keytoken"]]
+      [arg "info-key"] \
+      [arg "-key keytoken"]]
 
 Return a serialized array of key properties.
 
-[para]
-
-The following three operations are implemented only for compatibility with
-TclGPGME. Otherwise using operation [arg list-keys] is preferable.
-
 [call [cmd "\$token"] \
-        [arg "-operation start-key"] \
-        [opt [arg "-patterns patterns"]] \
-        [opt [arg "-secretonly boolean"]]]
-
-Start searching for keys which match any of a specified patterns in the
-patterns list [arg patterns].
-
-[call [cmd "\$token"] \
-        [arg "-operation next-key"]]
-
-Return the next key token in a search list.
-
-[call [cmd "\$token"] \
-        [arg "-operation done-key"]]
-
-Stop searching for keys.
-
-[call [cmd "\$token"] \
-        [arg "-operation encrypt"] \
-        [arg "-input input"] \
-        [opt [arg "-recipients recipients"]] \
-        [opt [arg "-sign boolean"]] \
-        [opt [arg "-command command"]]]
+      [arg "encrypt"] \
+      [arg "-input input"] \
+      [opt [arg "-recipients recipients"]] \
+      [opt [arg "-sign boolean"]] \
+      [opt [arg "-command command"]]]
 
 Encrypt message (using either symmetric or asymmetric algorithm).
 
 [call [cmd "\$token"] \
-        [arg "-operation decrypt"] \
-        [arg "-input input"] \
-        [opt [arg "-checkstatus boolean"]] \
-        [opt [arg "-command command"]]]
+      [arg "decrypt"] \
+      [arg "-input input"] \
+      [opt [arg "-checkstatus boolean"]] \
+      [opt [arg "-command command"]]]
 
 Decrypt message.
 
 [call [cmd "\$token"] \
-        [arg "-operation sign"] \
-        [arg "-input input"] \
-        [opt [arg "-mode mode"]] \
-        [opt [arg "-command command"]]]
+      [arg "sign"] \
+      [arg "-input input"] \
+      [opt [arg "-mode mode"]] \
+      [opt [arg "-command command"]]]
 
 Sign message.
 
 [call [cmd "\$token"] \
-        [arg "-operation verify"] \
-        [arg "-signature signature"] \
-        [opt [arg "-input input"]] \
-        [opt [arg "-command command"]]]
+      [arg "verify"] \
+      [arg "-signature signature"] \
+      [opt [arg "-input input"]] \
+      [opt [arg "-command command"]]]
 
 Verify signature.
 
@@ -109,23 +90,28 @@ Verify signature.
 Create recipients token.
 
 [call [cmd "\$recipient"] \
-        [arg "-operation add"] \
-        [arg "-name name"] \
-        [opt [arg "-validity valid"]]]
+      [arg "add"] \
+      [arg "-name name"] \
+      [opt [arg "-validity valid"]]]
 
 Add name to a recipient token.
 
 [call [cmd "\$recipient"] \
-        [arg "-operation count"]]
-
-Return a number of recipients in a recipient token.
-
-[call [cmd "\$recipient"] \
-        [arg "-operation list"]]
+      [arg "list"]]
 
 Return a list of recipients in a recipient token.
 
 [list_end]
+
+[section ASYNCHRONOUS MODE]
+
+Many GPG subcommands may posess [arg "-command"] options. It turns
+asynchronous mode on and specifies a callback which is called to return
+operation result. This means that the command returns immediately, the pipe
+to GPG is switched to non-blocking mode and data from it is read only when
+it is available. After the operation is completed the callback is invoked
+with appended status (\"ok\" or \"error\") and the operation result in the
+same form as it would be returned in synchronous mode.
 
 [section EXAMPLES]
 
@@ -134,9 +120,13 @@ passphrase "abcdefgh":
 
 [comment {Spaces after trailing \ are essential}]
 [example {
-set ctx [::gpg::context]
-$ctx -operation set passphrase-callback {puts abcdefgh}
-$ctx -operation encrypt -input Hello
+proc pass {args} {return abcdefgh}
+set gpg [::gpg::new]
+$gpg set -property armor -value true
+$gpg set -property encoding -value utf-8
+$gpg set -property passphrase-callback -value pass
+puts [$gpg encrypt -input Hello]
+$gpg free
 }]
 
 [section "AUTHORS"]
