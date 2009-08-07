@@ -2,6 +2,8 @@
 
 	* tclgpg.tcl: Fixed typo.
 
+	* tclgpg.tcl: Added two debug messages.
+
 2009-08-03  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, doc/gpg.man: Broke compatibility with TclGPGME by

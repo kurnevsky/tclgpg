@@ -1523,6 +1523,8 @@ proc ::gpg::NoPassphrase {channels commands} {
 }
 
 proc ::gpg::FinishGPG {token operation channels input} {
+    Debug 2 "$token $operation $channels $input"
+
     foreach {filename stdin_fd stdout_fd stderr_fd status_fd command_fd} \
             $channels break
 
@@ -1604,6 +1606,8 @@ proc ::gpg::FinishGPG {token operation channels input} {
 }
 
 proc ::gpg::CleanupGPG {channels} {
+    Debug 2 $channels
+
     foreach {filename stdin_fd stdout_fd stderr_fd status_fd command_fd} \
             $channels break
 
