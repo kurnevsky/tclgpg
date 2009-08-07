@@ -1166,7 +1166,7 @@ proc ::gpg::ExecGPG {token args} {
         set name_fd [TempFile]
         foreach {filename fd} $name_fd break
 
-        fconfigure $input_fd -encoding $encoding
+        fconfigure $fd -encoding $encoding
 
         if {$textmode} {
             fconfigure $fd -translation crlf
