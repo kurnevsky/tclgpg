@@ -1,3 +1,7 @@
+2009-08-07  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Fixed typo.
+
 2009-08-03  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, doc/gpg.man: Broke compatibility with TclGPGME by
