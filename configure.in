@@ -172,6 +172,23 @@ AC_DEFINE(USE_TCL_STUBS, 1, [Use Tcl stubs])
 
 TEA_MAKE_LIB
 
+else
+
+#--------------------------------------------------------------------
+# This macro allows to find install program
+#--------------------------------------------------------------------
+
+AC_PROG_INSTALL
+
+#--------------------------------------------------------------------
+# These macros allow to install pkgIndex.tcl
+#--------------------------------------------------------------------
+
+SHARED_BUILD=1
+AC_SUBST(SHARED_BUILD)
+
+fi
+
 #--------------------------------------------------------------------
 # Determine the name of the tclsh and/or wish executables in the
 # Tcl and Tk build directories or the location they were installed
@@ -179,7 +196,6 @@ TEA_MAKE_LIB
 # the Makefile should not be making use of these paths to generate
 # a pkgIndex.tcl file or anything else at extension build time.
 #--------------------------------------------------------------------
-fi
 
 TEA_PROG_TCLSH
 
