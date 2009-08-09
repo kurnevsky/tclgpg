@@ -1,3 +1,8 @@
+2009-08-09  Sergei Golovan  <sgolovan@nes.ru>
+
+	* configure.in: Fixed installing the library if --disable-c-helper
+	  option is used (closes issue 1).
+
 2009-08-07  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed typo.
