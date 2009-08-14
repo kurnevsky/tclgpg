@@ -1,3 +1,12 @@
+2009-08-14  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Fixed message and signatures encodings when armor
+	  property is set to false. Rewritten procedure which calls GPG
+	  executable to make it easier to construct GPG command line options.
+	  Added passphrase-encoding property which equals the system encoding
+	  by default. Changed unset subcommand behavior to reset property to
+	  its default value.
+
 2009-08-09  Sergei Golovan  <sgolovan@nes.ru>
 
 	* configure.in: Fixed installing the library if --disable-c-helper

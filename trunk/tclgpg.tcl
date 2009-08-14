@@ -93,6 +93,7 @@ proc ::gpg::new {} {
     set state(armor) false
     set state(textmode) false
     set state(encoding) [encoding system]
+    set state(passphrase-encoding) [encoding system]
 
     proc $token {args} "eval {[namespace current]::Exec $token} \$args"
 
@@ -218,7 +219,7 @@ proc ::gpg::Set {token args} {
     variable properties [list protocol armor textmode number-of-certs \
                               keylistmode passphrase-callback \
                               progress-callback idle-callback signers \
-                              encoding]
+                              encoding passphrase-encoding]
 
     if {![info exists prop]} {
         return -code error \
@@ -291,15 +292,27 @@ proc ::gpg::Unset {token args} {
     set properties [list protocol armor textmode number-of-certs \
                          keylistmode passphrase-callback \
                          progress-callback idle-callback signers \
-                         encoding last-op-info]
+                         encoding passphrase-encoding last-op-info]
 
     if {![info exists prop]} {
         return -code error \
                [format "missing property:\
                         must be %s" $prop [JoinOptions $properties]]
     } elseif {[lsearch -exact $properties $prop] >= 0} {
-        if {[info exists state($prop)]} {
-            unset state($prop)
+        # Restoring the default settings or unsetting the property
+
+        switch -- $prop {
+            armor -
+            textmode {
+                set state($prop) false
+            }
+            encoding -
+            passphrase-encoding {
+                set state($prop) [encoding system]
+            }
+            default {
+                catch {unset state($prop)}
+            }
         }
     } else {
         return -code error \
@@ -351,16 +364,21 @@ proc ::gpg::Sign {token args} {
         return -code error "missing input to sign"
     }
 
-    if {![catch {Set $token -property armor} armor] && $armor} {
-        set params {--armor}
-    } else {
-        set params {--no-armor}
-    }
+    set params {}
 
     switch -- $mode {
-        normal  { lappend params --sign }
-        detach  { lappend params --detach-sign }
-        clear   { lappend params --clearsign }
+        normal  {
+            lappend params --sign
+            set operation sign
+        }
+        detach  {
+            lappend params --detach-sign
+            set operation detach-sign
+        }
+        clear   {
+            lappend params --clearsign
+            set operation clearsign
+        }
         default {
             return -code error \
                    [format "unknown mode \"%s\":\
@@ -380,7 +398,7 @@ proc ::gpg::Sign {token args} {
         lappend params -u $tmp(keyid)
     }
 
-    set gpgChannels [eval ExecGPG $token $params --]
+    set gpgChannels [eval ExecGPG $token $operation $params --]
     return [UseGPG $token sign $commands $gpgChannels $input]
 }
 
@@ -446,11 +464,7 @@ proc ::gpg::Encrypt {token args} {
         return -code error "missing input to encrypt"
     }
 
-    if {![catch {Set $token -property armor} armor] && $armor} {
-        set params {--armor}
-    } else {
-        set params {--no-armor}
-    }
+    set params {}
 
     if {$sign} {
         lappend params --sign
@@ -496,7 +510,7 @@ proc ::gpg::Encrypt {token args} {
         lappend params --symmetric
     }
 
-    set gpgChannels [eval ExecGPG $token $params --]
+    set gpgChannels [eval ExecGPG $token encrypt $params --]
     return [UseGPG $token encrypt $commands $gpgChannels $input]
 }
 
@@ -543,10 +557,10 @@ proc ::gpg::Verify {token args} {
     }
 
     if {[info exists input]} {
-        set gpgChannels [ExecGPG $token --verify -- $signature]
+        set gpgChannels [ExecGPG $token verify --verify -- $signature]
         return [UseGPG $token verify $commands $gpgChannels $input]
     } else {
-        set gpgChannels [ExecGPG $token --]
+        set gpgChannels [ExecGPG $token "" --]
         return [UseGPG $token "" $commands $gpgChannels $signature]
     }
 }
@@ -603,10 +617,11 @@ proc ::gpg::Decrypt {token args} {
         return -code error "missing input to decrypt"
     }
 
-    set gpgChannels [ExecGPG $token --decrypt -- $input]
     if {$checkstatus} {
+        set gpgChannels [ExecGPG $token decrypt-check --decrypt -- $input]
         return [UseGPG $token decrypt-check $commands $gpgChannels]
     } else {
+        set gpgChannels [ExecGPG $token decrypt --decrypt -- $input]
         return [UseGPG $token decrypt $commands $gpgChannels]
     }
 }
@@ -740,7 +755,8 @@ proc ::gpg::InfoKey {token args} {
 
 proc ::gpg::FindKeys {token operation commands patterns} {
 
-    set channels [eval ExecGPG $token --batch \
+    set channels [eval ExecGPG $token list-keys \
+                                      --batch \
                                       --with-colons \
                                       --fixed-list-mode \
                                       --with-fingerprint \
@@ -749,21 +765,20 @@ proc ::gpg::FindKeys {token operation commands patterns} {
 
     set channels [lrange $channels 1 end]
 
-    # $fd is a stdout of executed GPG process
-    set fd [lindex $channels 1]
-    fconfigure $fd -encoding utf-8
+    # Configure stdout of executed GPG process
+    set stdout_fd [lindex $channels 1]
 
     if {[llength $commands] == 0} {
         # Synchronous mode, so make channel blocking and parse its contents
 
-        fconfigure $fd -blocking true
+        fconfigure $stdout_fd -blocking true
         return [Parse $channels $commands]
     } else {
         # Asynchronous mode, so make channel nonblocking and parse its contents
         # eventually
-        fconfigure $fd -blocking false
-        fileevent $fd readable [namespace code [list Parse $channels $commands]]
-        return $fd
+        fconfigure $stdout_fd -blocking false
+        fileevent $stdout_fd readable [namespace code [list Parse $channels $commands]]
+        return $stdout_fd
     }
 }
 
@@ -773,9 +788,9 @@ proc ::gpg::Parse {channels commands} {
     # This proc may be called several times as a fileevent, so we have to
     # maintain a state.
 
-    set fd [lindex $channels 1]
-    variable $fd
-    upvar 0 $fd state
+    set stdout_fd [lindex $channels 1]
+    variable $stdout_fd
+    upvar 0 $stdout_fd state
 
     if {![info exists state(res)]} {
         set state(res) {}
@@ -787,7 +802,7 @@ proc ::gpg::Parse {channels commands} {
         set state(commands) $commands
     }
 
-    while {[gets $fd line] >= 0} {
+    while {[gets $stdout_fd line] >= 0} {
         set fields [split $line ":"]
         switch -- [lindex $fields 0] {
             pub -
@@ -843,7 +858,7 @@ proc ::gpg::Parse {channels commands} {
         }
     }
 
-    if {[eof $fd] || [llength $commands] == 0} {
+    if {[eof $stdout_fd] || [llength $commands] == 0} {
         # Store the last key
 
         if {[llength $state(subkey)] > 0} {
@@ -1043,6 +1058,11 @@ proc ::gpg::Algorithm {code} {
 #
 # Arguments:
 #       token       A GPG context token created in ::gpg::context.
+#       operation   one of the "", verify, encrypt, decrypt or decrypt-check,
+#                   sign, or list-keys. It must be consistent with a
+#                   corresponding option given in args ("", --verify, --encrypt
+#                   or --symmetric, --decrypt, or --sign or --clearsign or
+#                   --detach-sign, or --list-keys).
 #       args        Any arguments for gpg (see gpg(1) manual page) except
 #                   --status-fd and --command-fd which are added automatically.
 #
@@ -1058,18 +1078,34 @@ proc ::gpg::Algorithm {code} {
 #       A new gpg process is spawned. Also, if --decrypt or --verify options
 #       are present in arguments list then a temporary file is created.
 
-proc ::gpg::ExecGPG {token args} {
+proc ::gpg::ExecGPG {token operation args} {
     Debug 1 $args
 
     # Add common --no-tty, --quiet, --output -, --charset utf-8 arguments
 
     set args [linsert $args 0 --no-tty --quiet --output - --charset utf-8]
 
+    # Set --armor option before calling CExecGPG
+
+    set armor [Set $token -property armor]
+
+    switch -- $operation {
+        encrypt -
+        sign -
+        detach-sign {
+            # Armoring output makes sense only for sign and encrypt operations.
+
+            if {$armor} {
+                set args [linsert $args 0 --armor]
+            } else {
+                set args [linsert $args 0 --no-armor]
+            }
+        }
+    }
+
     # Set --textmode option before calling CExecGPG to make it simpler.
 
-    if {[catch {Set $token -property textmode} textmode]} {
-        set textmode false
-    }
+    set textmode [Set $token -property textmode]
 
     if {$textmode} {
         set args [linsert $args 0 --textmode]
@@ -1081,155 +1117,178 @@ proc ::gpg::ExecGPG {token args} {
 
     # Set proper encoding
 
-    if {[catch {Set $token -property encoding} encoding]} {
-        set encoding [encoding system]
+    set encoding [Set $token -property encoding]
+
+    # For decryption or verification of a detached signature we use a
+    # temporary file or a pipe, so encrypted message has to be passed
+    # (and it's passed as the last argument).
+
+    switch -- $operation {
+        decrypt -
+        decrypt-check -
+        verify {
+            set input [lindex $args end]
+            set args [lrange $args 0 end-1]
+        }
     }
 
     if {[info commands [namespace current]::CExecGPG] ne ""} {
 
-        # C-based GPG invocation will use pipes instead of temporary files,
+        set channels [eval CExecGPG [executable] $args]
+
+        # C-based GPG invocation uses pipes instead of temporary files,
         # so in case of decryption or verification of a detached signature
         # it returns an additional channel where we put the input string.
 
-        if {[lsearch -exact $args --decrypt] >= 0 || \
-                [lsearch -exact $args --verify] >= 0} {
-            set input [lindex $args end]
-            set args [lrange $args 0 end-1]
+        switch -- $operation {
+            decrypt -
+            decrypt-check -
+            verify {
+                set input_fd [lindex $channels end]
 
-            set channels [eval CExecGPG [executable] $args]
-            set input_fd [lindex $channels end]
+                # Encrypted material and/or detached signature are both either
+                # in ASCII (if armored) or binary (if not armored). For both
+                # cases binary translation is fine.
 
-            fconfigure $input_fd -encoding $encoding
+                fconfigure $input_fd -translation binary
 
-            if {$textmode} {
-                fconfigure $input_fd -translation crlf
+                puts -nonewline $input_fd $input
+                close $input_fd
+
+                set channels [lrange $channels 0 end-1]
             }
-
-            puts -nonewline $input_fd $input
-            close $input_fd
-
-            set channels [lrange $channels 0 end-1]
-        } else {
-            set channels [eval CExecGPG [executable] $args]
         }
 
-        # stdin
-        fconfigure [lindex $channels 0] -encoding $encoding -buffering none
-        # stdout
-        fconfigure [lindex $channels 1] -encoding $encoding
-        # stderr
-        fconfigure [lindex $channels 2] -encoding utf-8
-        # status-fd
-        fconfigure [lindex $channels 3] -encoding utf-8
-        if {[llength $channels] == 5} {
-            # command-fd
-            fconfigure [lindex $channels 4] -encoding $encoding -buffering none
-        }
-
-        return [linsert $channels 0 ""]
-    }
-
-    # For decryption or verification of a detached signature we use a
-    # temporary file, so encrypted message has to be passed (and it's
-    # passed as the last argument).
-
-    if {[lsearch -exact $args --decrypt] >= 0} {
-        set decrypt 1
-        set verify 0
-        set input [lindex $args end]
-        set args [lrange $args 0 end-1]
-    } elseif {[lsearch -exact $args --verify] >= 0} {
-        set decrypt 0
-        set verify 1
-        set input [lindex $args end]
-        set args [lrange $args 0 end-1]
-    } else {
-        set decrypt 0
-        set verify 0
-    }
-
-    # Raise an error if there are dangerous arguments
-
-    foreach arg $args {
-        if {[string first < $arg] == 0 || [string first > $arg] == 0 || \
-            [string first 2> $arg] == 0 || [string first | $arg] == 0 || \
-            [string equal & $arg]} {
-
-            return -code error \
-                   [format "forbidden argument \"%s\" in exec call" $arg]
-        }
-    }
-
-    # Create a temporary file for decryption or verification
-
-    if {$decrypt || $verify} {
-        set name_fd [TempFile]
-        foreach {filename fd} $name_fd break
-
-        fconfigure $fd -encoding $encoding
-
-        if {$textmode} {
-            fconfigure $fd -translation crlf
-        }
-
-        puts -nonewline $fd $input
-        close $fd
-
-        set args [linsert $args 0 --enable-special-filenames]
-        set args [linsert $args end $filename]
-    } else {
         set filename ""
-    }
 
-    # In case of verification of a detached signature two channels are
-    # necessary, so add stdin for signed input
-
-    if {$verify} {
-        set args [linsert $args end -]
-    }
-
-    # Add common --status-fd argument, and
-    # --command-fd if there's no --batch option
-
-    set args [linsert $args 0 --status-fd 2]
-
-    if {[lsearch -exact $args --batch] < 0} {
-        set args [linsert $args 0 --command-fd 0]
-        set batch 0
     } else {
-        set batch 1
+
+        # Raise an error if there are dangerous arguments
+
+        foreach arg $args {
+            if {[string first < $arg] == 0 || [string first > $arg] == 0 || \
+                [string first 2> $arg] == 0 || [string first | $arg] == 0 || \
+                [string equal & $arg]} {
+
+                return -code error \
+                       [format "forbidden argument \"%s\" in exec call" $arg]
+            }
+        }
+
+        # Create a temporary file for decryption or verification
+
+        switch -- $operation {
+            decrypt -
+            decrypt-check -
+            verify {
+                foreach {filename input_fd} [TempFile] break
+
+                # Encrypted material and/or detached signature are both either
+                # in ASCII (if armored) or binary (if not armored). For both
+                # cases binary translation is fine.
+
+                fconfigure $input_fd -translation binary
+
+                puts -nonewline $input_fd $input
+                close $input_fd
+
+                set args [linsert $args 0 --enable-special-filenames]
+                set args [linsert $args end $filename]
+            }
+            default {
+                set filename ""
+            }
+        }
+
+        # In case of verification of a detached signature two channels are
+        # necessary, so add stdin for signed input
+
+        switch -- $operation {
+            verify {
+                set args [linsert $args end -]
+            }
+        }
+
+        # Add common --status-fd argument, and
+        # --command-fd if there's no --batch option
+
+        set args [linsert $args 0 --status-fd 2]
+
+        if {[lsearch -exact $args --batch] < 0} {
+            set args [linsert $args 0 --command-fd 0]
+            set batch 0
+        } else {
+            set batch 1
+        }
+
+        set pList [pipe]
+        foreach {pRead pWrite} $pList break
+
+        set qList [pipe]
+        foreach {qRead qWrite} $qList break
+
+        # Redirect stdout and stderr to pipes
+
+        lappend args >@ $pWrite 2>@ $qWrite
+
+        Debug 2 [linsert $args 0 [executable]]
+
+        set fd [open |[linsert $args 0 [executable]] w]
+        close $pWrite
+        close $qWrite
+
+        if {!$batch} {
+            # Return channels in order: temporary file name, stdin, stdout,
+            # stderr, status-fd, command-fd
+
+            set channels [list $fd $pRead $qRead $qRead $fd]
+        } else {
+            # Return channels in order: temporary file name, stdin, stdout,
+            # stderr, status-fd
+
+            set channels [list $fd $pRead $qRead $qRead]
+        }
     }
 
-    set pList [pipe]
-    foreach {pRead pWrite} $pList break
-    fconfigure $pRead -encoding $encoding
+    # Configuring input/output channels
 
-    set qList [pipe]
-    foreach {qRead qWrite} $qList break
-    fconfigure $qRead -encoding utf-8
-
-    # Redirect stdout and stderr to pipes
-
-    lappend args >@ $pWrite 2>@ $qWrite
-
-    Debug 2 [linsert $args 0 [executable]]
-
-    set fd [open |[linsert $args 0 [executable]] w]
-    fconfigure $fd -encoding $encoding -buffering none
-    close $pWrite
-    close $qWrite
-
-    if {!$batch} {
-        # Return channels in order: temporary file name, stdin, stdout,
-        # stderr, status-fd, command-fd
-
-        return [list $filename $fd $pRead $qRead $qRead $fd]
-    } else {
-        # Return channels in order: temporary file name, stdin, stdout,
-        # stderr, status-fd
-
-        return [list $filename $fd $pRead $qRead $qRead]
+    if {[llength $channels] == 5} {
+        # command-fd and stdin are the same channel if CExecGPG is unavailable,
+        # so, configure its encoding right before use
+        fconfigure [lindex $channels 4] -buffering none
     }
+
+    # stdin
+    fconfigure [lindex $channels 0] -encoding $encoding -buffering none
+
+    # stdout
+    switch -- $operation {
+        list-keys {
+            fconfigure [lindex $channels 1] -encoding utf-8
+        }
+        sign -
+        detach-sign -
+        encrypt {
+            if {!$armor} {
+                fconfigure [lindex $channels 1] -translation binary
+            } else {
+                fconfigure [lindex $channels 1] -encoding $encoding
+            }
+        }
+        default {
+            fconfigure [lindex $channels 1] -encoding $encoding
+        }
+    }
+
+    # stderr is always in UTF-8
+    fconfigure [lindex $channels 2] -encoding utf-8
+
+    # status-fd is always in UTF-8
+    fconfigure [lindex $channels 3] -encoding utf-8
+
+    # Insert a temporary file name at the beginning of channels list
+
+    return [linsert $channels 0 $filename]
 }
 
 # ::gpg::UseGPG --
@@ -1261,10 +1320,21 @@ proc ::gpg::UseGPG {token operation commands channels {input ""}} {
     set status_fd [lindex $channels 4]
 
     switch -- $operation {
-        "" -
+        "" {
+            # Here $input contains a signature, or a clear signature, which
+            # require different encodings, so we have to use some heuristics
+
+            if {![string match "-----BEGIN PGP SIGNED MESSAGE-----*" $input]} {
+                fconfigure $stdin_fd -translation binary -buffering none
+            }
+
+            puts -nonewline $stdin_fd $input
+            catch {close $stdin_fd}
+        }
         verify {
-            # Here $input contains either a signature, or a signed material
-            # if a signature is detached.
+            # Here $input contains a signed material (verifying a detached
+            # signature)
+
             puts -nonewline $stdin_fd $input
             catch {close $stdin_fd}
         }
@@ -1343,8 +1413,16 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                     if {[catch {eval $pcb [list $arglist]} passphrase]} {
                         NoPassphrase $channels $commands
                     } else {
+                        # Passphrase encoding may differ from message encoding,
+                        # so we have to save command-fd encoding in case when
+                        # command-fd and stdin are the same channel.
+
+                        set encoding [fconfigure $command_fd -encoding]
+                        fconfigure $command_fd \
+                            -encoding [Set $token -property passphrase-encoding]
                         puts $command_fd $passphrase
                         flush $command_fd
+                        fconfigure $command_fd -encoding $encoding
                     }
                 }
             }
@@ -1359,8 +1437,16 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                          } passphrase]} {
                         NoPassphrase $channels $commands
                     } else {
+                        # Passphrase encoding may differ from message encoding,
+                        # so we have to save command-fd encoding in case when
+                        # command-fd and stdin are the same channel.
+
+                        set encoding [fconfigure $command_fd -encoding]
+                        fconfigure $command_fd \
+                            -encoding [Set $token -property passphrase-encoding]
                         puts $command_fd $passphrase
                         flush $command_fd
+                        fconfigure $command_fd -encoding $encoding
                     }
                 }
             }
@@ -1573,14 +1659,10 @@ proc ::gpg::FinishGPG {token operation channels input} {
     switch -- $operation {
         encrypt -
         sign {
-            # Supply message for decryption, encryption or signing
+            # Supply message for encryption or signing
 
             puts -nonewline $stdin_fd $input
             catch {close $stdin_fd}
-
-            if {[catch {Set $token -property armor} armor] || !$armor} {
-                fconfigure $stdout_fd -translation lf
-            }
 
             set data [read $stdout_fd]
         }
