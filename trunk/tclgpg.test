@@ -16,7 +16,7 @@ namespace import tcltest::*
 set auto_path [linsert $auto_path 0 [file dirname [info script]]]
 
 set env(GNUPGHOME) [file join [file dirname [info script]] gnupg]
-file attributes $env(GNUPGHOME) -permissions 0700
+catch {file attributes $env(GNUPGHOME) -permissions 0700}
 
 package forget gpg
 package require -exact gpg 1.0
