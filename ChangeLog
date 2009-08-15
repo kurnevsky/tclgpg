@@ -10,6 +10,9 @@
 
 	* Makefile.in: Fixed test target.
 
+	* tclgpg.test: Protected setting gnupg directory permissions to allow
+	  to run test suite on Windows.
+
 2009-08-14  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed message and signatures encodings when armor
