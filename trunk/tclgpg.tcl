@@ -180,7 +180,8 @@ proc ::gpg::Wait {token args} {
 
 # ::gpg::Set --
 #
-#       Set a given GPG context property to a given value.
+#       Set a given GPG context property to a given value or query GPG context
+#       property.
 #
 # Arguments:
 #       token           A GPG context token created in ::gpg::context.
@@ -190,7 +191,7 @@ proc ::gpg::Wait {token args} {
 #                       unset.
 #
 # Result:
-#       Empty string in case of success, or an error if a property is missing
+#       Property value in case of success, or an error if a property is missing
 #       or unknown.
 #
 # Side effects:
@@ -216,15 +217,14 @@ proc ::gpg::Set {token args} {
         }
     }
 
-    variable properties [list protocol armor textmode number-of-certs \
-                              keylistmode passphrase-callback \
-                              progress-callback idle-callback signers \
-                              encoding passphrase-encoding]
+    variable properties [list armor textmode passphrase-callback \
+                              signers encoding passphrase-encoding \
+                              last-op-info]
 
     if {![info exists prop]} {
         return -code error \
                [format "missing property:\
-                        must be %s" $prop [JoinOptions $properties]]
+                        must be %s" [JoinOptions $properties]]
     } elseif {[lsearch -exact $properties $prop] >= 0} {
         if {![info exists value]} {
             if {[info exists state($prop)]} {
@@ -289,15 +289,13 @@ proc ::gpg::Unset {token args} {
         }
     }
 
-    set properties [list protocol armor textmode number-of-certs \
-                         keylistmode passphrase-callback \
-                         progress-callback idle-callback signers \
-                         encoding passphrase-encoding last-op-info]
+    set properties [list armor textmode passphrase-callback \
+                         signers encoding passphrase-encoding]
 
     if {![info exists prop]} {
         return -code error \
                [format "missing property:\
-                        must be %s" $prop [JoinOptions $properties]]
+                        must be %s" [JoinOptions $properties]]
     } elseif {[lsearch -exact $properties $prop] >= 0} {
         # Restoring the default settings or unsetting the property
 
@@ -865,7 +863,7 @@ proc ::gpg::Parse {channels commands} {
             lappend state(subkeys) $state(subkey)
         }
         if {[llength $state(subkeys)] > 0} {
-            lappend state(key) state(subkeys) $state(subkeys)
+            lappend state(key) subkeys $state(subkeys)
         }
         array set tmp $state(key)
         if {[info exists tmp(fingerprint)]} {
