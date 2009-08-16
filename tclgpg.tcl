@@ -1393,6 +1393,7 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                 set state(userid_hint) [join [lrange $fields 3 end]]
             }
             NEED_PASSPHRASE {
+                set state(badpassphrase) 0
                 if {![package vsatisfies $Version 2.0]} {
                     if {![info exists state(hint)]} {
                         set state(hint) enter
@@ -1400,7 +1401,8 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                         set state(hint) try_again
                     }
                     if {[catch {Set $token -property passphrase-callback} pcb]} {
-                        NoPassphrase $channels $commands
+                        FinishWithError $channels $commands "No passphrase"
+                        return
                     }
                     set arglist [list token $token \
                                       hint $state(hint) \
@@ -1409,7 +1411,8 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                                       subkeyid [lindex $fields 3]]
                     Debug 2 $arglist
                     if {[catch {eval $pcb [list $arglist]} passphrase]} {
-                        NoPassphrase $channels $commands
+                        FinishWithError $channels $commands "No passphrase"
+                        return
                     } else {
                         # Passphrase encoding may differ from message encoding,
                         # so we have to save command-fd encoding in case when
@@ -1425,15 +1428,18 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                 }
             }
             NEED_PASSPHRASE_SYM {
+                set state(badpassphrase) 0
                 if {![package vsatisfies $Version 2.0]} {
                     if {[catch {Set $token -property passphrase-callback} pcb]} {
-                        NoPassphrase $channels $commands
+                        FinishWithError $channels $commands "No passphrase"
+                        return
                     }
                     if {[catch {
                             eval $pcb [list [list token $token \
                                                   hint enter]]
                          } passphrase]} {
-                        NoPassphrase $channels $commands
+                        FinishWithError $channels $commands "No passphrase"
+                        return
                     } else {
                         # Passphrase encoding may differ from message encoding,
                         # so we have to save command-fd encoding in case when
@@ -1448,19 +1454,20 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                     }
                 }
             }
+            BAD_PASSPHRASE {
+                set state(badpassphrase) 1
+            }
+            DECRYPTION_FAILED {
+                FinishWithError $channels $commands "Decryption failed"
+                return
+            }
             KEYEXPIRED {
                 switch -- $operation {
                     "" -
                     verify {}
                     default {
-                        CleanupGPG $channels
-                        if {[llength $commands] == 0} {
-                            return -code error "Key expired"
-                        } else {
-                            uplevel #0 [lindex $commands 0] \
-                                       [list error "Key expired"]
-                            return
-                        }
+                        FinishWithError $channels $commands "Key expired"
+                        return
                     }
                 }
             }
@@ -1469,14 +1476,8 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                     "" -
                     verify {}
                     default {
-                        CleanupGPG $channels
-                        if {[llength $commands] == 0} {
-                            return -code error "Key revoked"
-                        } else {
-                            uplevel #0 [lindex $commands 0] \
-                                       [list error "Key revoked"]
-                            return
-                        }
+                        FinishWithError $channels $commands "Key revoked"
+                        return
                     }
                 }
             }
@@ -1582,6 +1583,11 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
     }
 
     if {$eof || [eof $status_fd] || [llength $commands] == 0} {
+        if {[info exists state(badpassphrase)] && $state(badpassphrase)} {
+            FinishWithError $channels $commands "Bad passphrase"
+            return
+        }
+
         set data [FinishGPG $token $operation $channels $input]
 
         CleanupGPG $channels
@@ -1596,12 +1602,12 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
     return
 }
 
-proc ::gpg::NoPassphrase {channels commands} {
+proc ::gpg::FinishWithError {channels commands error} {
     CleanupGPG $channels
     if {[llength $commands] == 0} {
-        return -code error "No passphrase"
+        return -code error $error
     } else {
-        uplevel #0 [lindex $commands 0] [list error "No passphrase"]
+        uplevel #0 [lindex $commands 0] [list error $error]
         return
     }
 }
