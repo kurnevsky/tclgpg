@@ -250,6 +250,135 @@ proc pcb2 {args} {
     return 0987654321
 }
 
+proc pcb3 {args} {
+    return -code break ""
+}
+
+set message "Hello \u041f\u0440\u0438\u0432\u0435\u0442"
+
+test encrypt-decrypt-1.1 {Symmetric cipher (armored)} -body {
+    set c [::gpg::new]
+    $c set -property armor -value true
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    set res [$c decrypt -input [$c encrypt -input $message]]
+    $c free
+    set res
+} -result [list plaintext $message]
+
+test encrypt-decrypt-1.2 {Symmetric cipher (unarmored)} -body {
+    set c [::gpg::new]
+    $c set -property armor -value false
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    set res [$c decrypt -input [$c encrypt -input $message]]
+    $c free
+    set res
+} -result [list plaintext $message]
+
+test encrypt-decrypt-1.3 {Symmetric cipher & incorrect passphrase} -body {
+    set c [::gpg::new]
+    $c set -property armor -value true
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    set msg [$c encrypt -input $message]
+    $c set -property passphrase-callback -value pcb2
+    set code [catch {$c decrypt -input $msg} res]
+    $c free
+    list $code $res
+} -result {1 {Decryption failed}}
+
+test encrypt-decrypt-1.4 {Symmetric cipher & missing passphrase} -body {
+    set c [::gpg::new]
+    $c set -property armor -value true
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    set msg [$c encrypt -input $message]
+    $c set -property passphrase-callback -value pcb3
+    set code [catch {$c decrypt -input $msg} res]
+    $c free
+    list $code $res
+} -result {1 {No passphrase}}
+
+test sign-verify-1.1 {Ordinary sign (armored)} -body {
+    set c [::gpg::new]
+    $c set -property armor -value true
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
+    set sig [$c sign -input $message]
+    array set ares [$c verify -signature $sig]
+    $c free
+    list $ares(status) $ares(plaintext)
+} -result [list good $message]
+
+test sign-verify-1.2 {Ordinary sign (unarmored)} -body {
+    set c [::gpg::new]
+    $c set -property armor -value false
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
+    set sig [$c sign -input $message]
+    array set ares [$c verify -signature $sig]
+    $c free
+    list $ares(status) $ares(plaintext)
+} -result [list good $message]
+
+test sign-verify-1.3 {Detached sign (armored)} -body {
+    set c [::gpg::new]
+    $c set -property armor -value true
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
+    set sig [$c sign -input $message -mode detach]
+    array set ares [$c verify -signature $sig -input $message]
+    $c free
+    list $ares(status) $ares(plaintext)
+} -result [list good $message]
+
+test sign-verify-1.4 {Detached sign (unarmored)} -body {
+    set c [::gpg::new]
+    $c set -property armor -value false
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
+    set sig [$c sign -input $message -mode detach]
+    array set ares [$c verify -signature $sig -input $message]
+    $c free
+    list $ares(status) $ares(plaintext)
+} -result [list good $message]
+
+test sign-verify-1.5 {Clear sign} -body {
+    set c [::gpg::new]
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
+    set sig [$c sign -input $message -mode clear]
+    array set ares [$c verify -signature $sig]
+    $c free
+    list $ares(status) $ares(plaintext)
+} -result [list good $message\n]
+
+test sign-1.1 {Sign with no passphrase} -body {
+    set c [::gpg::new]
+    $c set -property passphrase-callback -value pcb3
+    $c set -property encoding -value utf-8
+    $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
+    set code [catch {$c sign -input $message} res]
+    $c free
+    list $code $res
+} -result {1 {No passphrase}}
+
+test sign-1.2 {Sign with incorrect passphrase} -body {
+    set c [::gpg::new]
+    $c set -property passphrase-callback -value pcb2
+    $c set -property encoding -value utf-8
+    $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
+    set code [catch {$c sign -input $message} res]
+    $c free
+    list $code $res
+} -result {1 {Bad passphrase}}
+
 cleanupTests
 
 # vim:ts=8:sw=4:sts=4:et:ft=tcl
