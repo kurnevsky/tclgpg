@@ -156,8 +156,7 @@ test unset-1.7 {Unset without a property} -body {
     set c [::gpg::new]
     $c unset
 } -returnCodes error \
-    -result {missing property: must be armor, textmode,\
-        passphrase-callback, signers, encoding, or passphrase-encoding} \
+    -result {wrong # args: should be unset -property propertyName} \
     -cleanup {$c free}
 
 test unset-1.8 {Unset with an incorrect option} -body {

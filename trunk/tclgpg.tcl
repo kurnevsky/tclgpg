@@ -278,6 +278,11 @@ proc ::gpg::Unset {token args} {
 
     Debug 2 "$token $args"
 
+    if {[llength $args] != 2} {
+        return -code error \
+            "wrong # args: should be unset -property propertyName"
+    }
+
     foreach {key val} $args {
         switch -- $key {
             -property { set prop $val }

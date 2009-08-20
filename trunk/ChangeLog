@@ -10,6 +10,10 @@
 
 	* doc/gpg.man: Enclosed section heading in quotes.
 
+	* tclgpg.tcl: [unset] command now checks if its
+	  the number of arguments it is passed and
+	  returns an error if it is wrong.
+
 2009-08-16  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Moved error generating code to a separate procedure.
