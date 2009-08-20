@@ -236,7 +236,7 @@ proc ::gpg::Set {token args} {
             if {[info exists state($prop)]} {
                 return $state($prop)
             } else {
-                return -code error [format "property \"%s\" isn't set" $prop]
+                return -code error [format "property \"%s\" is not set" $prop]
             }
         } else {
             switch -- $prop {

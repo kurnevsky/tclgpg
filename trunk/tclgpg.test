@@ -147,7 +147,7 @@ test unset-1.5 {Unset passphrase-callback property} -body {
     $c unset -property passphrase-callback
     $c set -property passphrase-callback
 } -returnCodes error \
-    -result {property "passphrase-callback" isn't set} \
+    -result {property "passphrase-callback" is not set} \
     -cleanup {$c free}
 
 test unset-1.6 {Unset unknown property} -body {

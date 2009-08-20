@@ -10,9 +10,12 @@
 
 	* doc/gpg.man: Enclosed section heading in quotes.
 
-	* tclgpg.tcl: Make [set] and [unset] commands
-	  check the number of arguments they are passed
-	  and return an error message if this number is wrong.
+	* tclgpg.tcl, tclgpg.test:
+	  - Made [set] and [unset] commands check the number
+	    of arguments they are passed and return an error
+		message if this number is wrong.
+	  - Corrected error message [set] returns when
+	    the option being queried is not set.
 
 2009-08-16  Sergei Golovan  <sgolovan@nes.ru>
 
