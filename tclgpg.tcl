@@ -204,6 +204,12 @@ proc ::gpg::Set {token args} {
 
     Debug 2 "$token $args"
 
+    if {[llength $args] != 2 && [llength $args] != 4} {
+        return -code error \
+            "wrong # args: should be set -property propertyName\
+                ?-value value?"
+    }
+
     foreach {key val} $args {
         switch -- $key {
             -property { set prop  $val }

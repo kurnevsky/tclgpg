@@ -95,13 +95,12 @@ test set-1.9 {Set textmode property to invalid value} -body {
     -result {invalid textmode value "v": must be boolean} \
     -cleanup {$c free}
 
-test set-1.10 {Set without a property} -body {
+test set-1.10 {Set with no arguments} -body {
     set c [::gpg::new]
     $c set
 } -returnCodes error \
-    -result {missing property: must be armor, textmode,\
-        passphrase-callback, signers, encoding,\
-        passphrase-encoding, or last-op-info} \
+    -result {wrong # args: should be set -property propertyName\
+        ?-value value?} \
     -cleanup {$c free}
 
 test set-1.11 {Set with an incorrect option} -body {
@@ -109,6 +108,14 @@ test set-1.11 {Set with an incorrect option} -body {
     $c set -prop armor
 } -returnCodes error \
     -result {unknown option "-prop": must be -property or -value} \
+    -cleanup {$c free}
+
+test set-1.12 {Set with extraneous arguments} -body {
+    set c [::gpg::new]
+    $c set -property textmode -value true -property armor -value true
+} -returnCodes error \
+    -result {wrong # args: should be set -property propertyName\
+        ?-value value?} \
     -cleanup {$c free}
 
 test unset-1.1 {Unset armor property} -body {
