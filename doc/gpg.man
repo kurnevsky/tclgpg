@@ -16,28 +16,28 @@ TclGPGME.
 [section "COMMANDS"]
 
 [list_begin definitions]
-[call [cmd "::gpg::new"]]
+[call [cmd set] [arg gpg] \[[cmd ::gpg::new]\]]
 
 Create a new GPG context token.
 
-[call [cmd "\$token"] [arg "free"]]
+[call [cmd "\$gpg"] [arg "free"]]
 
 Destroy GPG token and free its resources.
 
-[call [cmd "\$token"] \
+[call [cmd "\$gpg"] \
       [arg "set"] \
       [arg "-property property"] \
       [opt [arg "-value value"]]]
 
 Set or query a specified property.
 
-[call [cmd "\$token"] \
+[call [cmd "\$gpg"] \
         [arg "unset"] \
         [arg "-property property"]]
 
 Unset a specified property.
 
-[call [cmd "\$token"] \
+[call [cmd "\$gpg"] \
       [arg "list-keys"] \
       [opt [arg "-patterns patterns"]] \
       [opt [arg "-secretonly boolean"]] \
@@ -46,13 +46,13 @@ Unset a specified property.
 Return list of key tokens which match any of a specified patterns in the
 patterns list [arg patterns].
 
-[call [cmd "\$token"] \
+[call [cmd "\$gpg"] \
       [arg "info-key"] \
       [arg "-key keytoken"]]
 
 Return a serialized array of key properties.
 
-[call [cmd "\$token"] \
+[call [cmd "\$gpg"] \
       [arg "encrypt"] \
       [arg "-input input"] \
       [opt [arg "-recipients recipients"]] \
@@ -61,7 +61,7 @@ Return a serialized array of key properties.
 
 Encrypt message (using either symmetric or asymmetric algorithm).
 
-[call [cmd "\$token"] \
+[call [cmd "\$gpg"] \
       [arg "decrypt"] \
       [arg "-input input"] \
       [opt [arg "-checkstatus boolean"]] \
@@ -69,7 +69,7 @@ Encrypt message (using either symmetric or asymmetric algorithm).
 
 Decrypt message.
 
-[call [cmd "\$token"] \
+[call [cmd "\$gpg"] \
       [arg "sign"] \
       [arg "-input input"] \
       [opt [arg "-mode mode"]] \
@@ -77,7 +77,7 @@ Decrypt message.
 
 Sign message.
 
-[call [cmd "\$token"] \
+[call [cmd "\$gpg"] \
       [arg "verify"] \
       [arg "-signature signature"] \
       [opt [arg "-input input"]] \
@@ -85,7 +85,7 @@ Sign message.
 
 Verify signature.
 
-[call [cmd "::gpg::recipient"]]
+[call [cmd set] [arg recipient] \[[cmd ::gpg::recipient]\]]
 
 Create recipients token.
 
