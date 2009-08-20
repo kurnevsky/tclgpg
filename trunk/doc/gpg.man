@@ -103,7 +103,7 @@ Return a list of recipients in a recipient token.
 
 [list_end]
 
-[section ASYNCHRONOUS MODE]
+[section "ASYNCHRONOUS MODE"]
 
 Many GPG subcommands may posess [arg "-command"] options. It turns
 asynchronous mode on and specifies a callback which is called to return
