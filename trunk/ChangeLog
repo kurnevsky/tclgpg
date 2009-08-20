@@ -1,3 +1,15 @@
+2009-08-20  Konstantin Khomoutov  <flatworm@users.sourceforge.net>
+
+	* tclgpg.test: Improved test suite:
+	  - Used -cleanup and -setup where applicable.
+	  - Used "-resultCodes error" to test for errors.
+	  - Reformatted results of some tests to fit into a
+	    terminal window.
+
+	* configure.in: Added doc/*.html to CLEANFILES
+
+	* doc/gpg.man: Enclosed section heading in quotes.
+
 2009-08-16  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Moved error generating code to a separate procedure.
