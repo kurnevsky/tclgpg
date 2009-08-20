@@ -76,7 +76,7 @@ TEA_ADD_CFLAGS([])
 TEA_ADD_STUB_SOURCES([])
 TEA_ADD_TCL_SOURCES([tclgpg.tcl])
 
-CLEANFILES="$CLEANFILES doc/*.n"
+CLEANFILES="$CLEANFILES doc/*.n doc/*.html"
 
 if test "${BUILD_C_HELPER}" = "yes" ; then
 #-----------------------------------------------------------------------
