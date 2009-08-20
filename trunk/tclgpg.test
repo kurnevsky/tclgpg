@@ -23,11 +23,9 @@ package require -exact gpg 1.0
 
 test new-1.1 {Create context} -body {
     set c [::gpg::new]
-    set res [list [string equal [info procs $c] $c] \
-                  [string equal [info vars $c] $c]]
-    $c free
-    set res
-} -result {1 1}
+    list [string equal [info procs $c] $c] \
+                  [string equal [info vars $c] $c]
+} -result {1 1} -cleanup {$c free}
 
 test free-1.1 {Create and destroy context} -body {
     set c [::gpg::new]
@@ -38,209 +36,208 @@ test free-1.1 {Create and destroy context} -body {
 test set-1.1 {Set armor property} -body {
     set c [::gpg::new]
     $c set -property armor -value true
-    set res [$c set -property armor]
-    $c free
-    set res
-} -result true
+    $c set -property armor
+} -result true -cleanup {$c free}
 
 test set-1.2 {Set textmode property} -body {
     set c [::gpg::new]
     $c set -property textmode -value true
-    set res [$c set -property textmode]
-    $c free
-    set res
-} -result true
+    $c set -property textmode
+} -result true -cleanup {$c free}
 
 test set-1.3 {Set encoding property} -body {
     set c [::gpg::new]
     $c set -property encoding -value utf-8
-    set res [$c set -property encoding]
-    $c free
-    set res
-} -result utf-8
+    $c set -property encoding
+} -result utf-8 -cleanup {$c free}
 
 test set-1.4 {Set passphrase-encoding property} -body {
     set c [::gpg::new]
     $c set -property passphrase-encoding -value utf-8
-    set res [$c set -property passphrase-encoding]
-    $c free
-    set res
-} -result utf-8
+    $c set -property passphrase-encoding
+} -result utf-8 -cleanup {$c free}
 
 test set-1.5 {Set passphrase-callback property} -body {
     set c [::gpg::new]
     $c set -property passphrase-callback -value pcb
-    set res [$c set -property passphrase-callback]
-    $c free
-    set res
-} -result pcb
+    $c set -property passphrase-callback
+} -result pcb -cleanup {$c free}
 
 test set-1.6 {Set unknown property} -body {
     set c [::gpg::new]
-    set code [catch {$c set -property unknown -value val} res]
-    $c free
-    list $code $res
-} -result {1 {unknown property "unknown": must be armor, textmode, passphrase-callback, signers, encoding, passphrase-encoding, or last-op-info}}
+    $c set -property unknown -value val
+} -returnCodes error \
+    -result {unknown property "unknown":\
+        must be armor, textmode, passphrase-callback,\
+        signers, encoding, passphrase-encoding, or last-op-info} \
+    -cleanup {$c free}
 
 test set-1.7 {Query unknown property} -body {
     set c [::gpg::new]
-    set code [catch {$c set -property unknown} res]
-    $c free
-    list $code $res
-} -result {1 {unknown property "unknown": must be armor, textmode, passphrase-callback, signers, encoding, passphrase-encoding, or last-op-info}}
+    $c set -property unknown
+} -returnCodes error \
+    -result {unknown property "unknown":\
+        must be armor, textmode, passphrase-callback, signers,\
+        encoding, passphrase-encoding, or last-op-info} \
+    -cleanup {$c free}
 
 test set-1.8 {Set armor property to invalid value} -body {
     set c [::gpg::new]
-    set code [catch {$c set -property armor -value v} res]
-    $c free
-    list $code $res
-} -result {1 {invalid armor value "v": must be boolean}}
+    $c set -property armor -value v
+} -returnCodes error \
+    -result {invalid armor value "v": must be boolean} \
+    -cleanup {$c free}
 
 test set-1.9 {Set textmode property to invalid value} -body {
     set c [::gpg::new]
-    set code [catch {$c set -property textmode -value v} res]
-    $c free
-    list $code $res
-} -result {1 {invalid textmode value "v": must be boolean}}
+    $c set -property textmode -value v
+} -returnCodes error \
+    -result {invalid textmode value "v": must be boolean} \
+    -cleanup {$c free}
 
 test set-1.10 {Set without a property} -body {
     set c [::gpg::new]
-    set code [catch {$c set} res]
-    $c free
-    list $code $res
-} -result {1 {missing property: must be armor, textmode, passphrase-callback, signers, encoding, passphrase-encoding, or last-op-info}}
+    $c set
+} -returnCodes error \
+    -result {missing property: must be armor, textmode,\
+        passphrase-callback, signers, encoding,\
+        passphrase-encoding, or last-op-info} \
+    -cleanup {$c free}
 
 test set-1.11 {Set with an incorrect option} -body {
     set c [::gpg::new]
-    set code [catch {$c set -prop armor} res]
-    $c free
-    list $code $res
-} -result {1 {unknown option "-prop": must be -property or -value}}
+    $c set -prop armor
+} -returnCodes error \
+    -result {unknown option "-prop": must be -property or -value} \
+    -cleanup {$c free}
 
 test unset-1.1 {Unset armor property} -body {
     set c [::gpg::new]
     $c unset -property armor
-    set res [$c set -property armor]
-    $c free
-    set res
-} -result false
+    $c set -property armor
+} -result false -cleanup {$c free}
 
 test unset-1.2 {Unset textmode property} -body {
     set c [::gpg::new]
     $c unset -property textmode
-    set res [$c set -property textmode]
-    $c free
-    set res
-} -result false
+    $c set -property textmode
+} -result false -cleanup {$c free}
 
 test unset-1.3 {Unset encoding property} -body {
     set c [::gpg::new]
     $c unset -property encoding
-    set res [$c set -property encoding]
-    $c free
-    set res
-} -result [encoding system]
+    $c set -property encoding
+} -result [encoding system] -cleanup {$c free}
 
 test unset-1.4 {Unset passphrase-encoding property} -body {
     set c [::gpg::new]
     $c unset -property passphrase-encoding
-    set res [$c set -property passphrase-encoding]
-    $c free
-    set res
-} -result [encoding system]
+    $c set -property passphrase-encoding
+} -result [encoding system] -cleanup {$c free}
 
 test unset-1.5 {Unset passphrase-callback property} -body {
     set c [::gpg::new]
     $c unset -property passphrase-callback
-    set code [catch {$c set -property passphrase-callback} res]
-    $c free
-    list $code $res
-} -result {1 {property "passphrase-callback" isn't set}}
+    $c set -property passphrase-callback
+} -returnCodes error \
+    -result {property "passphrase-callback" isn't set} \
+    -cleanup {$c free}
 
 test unset-1.6 {Unset unknown property} -body {
     set c [::gpg::new]
-    set code [catch {$c unset -property unknown} res]
-    $c free
-    list $code $res
-} -result {1 {unknown property "unknown": must be armor, textmode, passphrase-callback, signers, encoding, or passphrase-encoding}}
+    $c unset -property unknown
+} -returnCodes error \
+    -result {unknown property "unknown": must be armor,\
+        textmode, passphrase-callback, signers, encoding,\
+        or passphrase-encoding} \
+    -cleanup {$c free}
 
 test unset-1.7 {Unset without a property} -body {
     set c [::gpg::new]
-    set code [catch {$c unset} res]
-    $c free
-    list $code $res
-} -result {1 {missing property: must be armor, textmode, passphrase-callback, signers, encoding, or passphrase-encoding}}
+    $c unset
+} -returnCodes error \
+    -result {missing property: must be armor, textmode,\
+        passphrase-callback, signers, encoding, or passphrase-encoding} \
+    -cleanup {$c free}
 
 test unset-1.8 {Unset with an incorrect option} -body {
     set c [::gpg::new]
-    set code [catch {$c unset -prop armor} res]
-    $c free
-    list $code $res
-} -result {1 {unknown option "-prop": must be -property}}
+    $c unset -prop armor
+} -returnCodes error \
+    -result {unknown option "-prop": must be -property} \
+    -cleanup {$c free}
 
 test list-keys-1.1 {List all public keys synchronously} -body {
     set c [::gpg::new]
-    set res [$c list-keys]
-    $c free
-    lsort $res
-} -result {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712 6A5E179C7201BA252BEEC16F36F27239DFA10A4E CC13143A088AEECCB99AF05778E9B5C778DC9112}
+    lsort [$c list-keys]
+} -result {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
+        6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
+        CC13143A088AEECCB99AF05778E9B5C778DC9112} \
+    -cleanup {$c free}
 
-test list-keys-1.2 {List all public keys asynchronously} -body {
+test list-keys-1.2 {List all public keys asynchronously} -setup {
     proc ::result {status keys} {
         set ::listkeys [list $status $keys]
     }
+    catch {unset ::listkeys}
+} -body {
     set c [::gpg::new]
     $c list-keys -command ::result
     vwait ::listkeys
+    list [lindex $::listkeys 0] [lsort [lindex $::listkeys 1]]
+} -cleanup {
     $c free
-    set res $::listkeys
     rename ::result ""
     unset ::listkeys
-    list [lindex $res 0] [lsort [lindex $res 1]]
-} -result {ok {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712 6A5E179C7201BA252BEEC16F36F27239DFA10A4E CC13143A088AEECCB99AF05778E9B5C778DC9112}}
+} -result {ok {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
+        6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
+        CC13143A088AEECCB99AF05778E9B5C778DC9112}}
 
 test list-keys-1.3 {List matching public keys synchronously} -body {
     set c [::gpg::new]
-    set res [$c list-keys -patterns {revoked}]
-    $c free
-    set res
-} -result {6A5E179C7201BA252BEEC16F36F27239DFA10A4E}
+    $c list-keys -patterns {revoked}
+} -result {6A5E179C7201BA252BEEC16F36F27239DFA10A4E} -cleanup {$c free}
 
 test list-keys-2.1 {List all secret keys synchronously} -body {
     set c [::gpg::new]
-    set res [$c list-keys -secretonly true]
-    $c free
-    lsort $res
-} -result {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712 6A5E179C7201BA252BEEC16F36F27239DFA10A4E CC13143A088AEECCB99AF05778E9B5C778DC9112}
+    lsort [$c list-keys -secretonly true]
+} -result {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
+        6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
+        CC13143A088AEECCB99AF05778E9B5C778DC9112} \
+    -cleanup {$c free}
 
-test list-keys-2.2 {List all secret keys asynchronously} -body {
+test list-keys-2.2 {List all secret keys asynchronously} -setup {
     proc ::result {status keys} {
         set ::listkeys [list $status $keys]
     }
+    catch {unset ::listkeys}
+} -body {
     set c [::gpg::new]
     $c list-keys -secretonly true -command ::result
     vwait ::listkeys
+    list [lindex $::listkeys 0] [lsort [lindex $::listkeys 1]]
+} -cleanup {
     $c free
-    set res $::listkeys
     rename ::result ""
     unset ::listkeys
-    list [lindex $res 0] [lsort [lindex $res 1]]
-} -result {ok {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712 6A5E179C7201BA252BEEC16F36F27239DFA10A4E CC13143A088AEECCB99AF05778E9B5C778DC9112}}
+} -result {ok {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
+        6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
+        CC13143A088AEECCB99AF05778E9B5C778DC9112}}
 
 test list-keys-2.3 {List matching secret keys synchronously} -body {
     set c [::gpg::new]
-    set res [$c list-keys -patterns {working}]
-    $c free
-    set res
-} -result {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712}
+    $c list-keys -patterns {working}
+} -result {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712} -cleanup {$c free}
 
 test info-key-1.1 {Info of matching public key} -body {
     set c [::gpg::new]
     set keys [$c list-keys -patterns {working}]
     array set ares [$c info-key -key [lindex $keys 0]]
-    $c free
+    # TODO use plain [array get] may be?
     list $ares(keyid) $ares(name) $ares(comment) $ares(email)
-} -result {4A6276E6C52F1712 {Sergei Golovan} {working key for testing TclGPG} sgolovan@gmail.com}
+} -result {4A6276E6C52F1712 {Sergei Golovan}\
+        {working key for testing TclGPG} sgolovan@gmail.com} \
+    -cleanup {$c free}
 
 proc pcb1 {args} {
     return 1234567890
@@ -261,20 +258,16 @@ test encrypt-decrypt-1.1 {Symmetric cipher (armored)} -body {
     $c set -property armor -value true
     $c set -property passphrase-callback -value pcb1
     $c set -property encoding -value utf-8
-    set res [$c decrypt -input [$c encrypt -input $message]]
-    $c free
-    set res
-} -result [list plaintext $message]
+    $c decrypt -input [$c encrypt -input $message]
+} -result [list plaintext $message] -cleanup {$c free}
 
 test encrypt-decrypt-1.2 {Symmetric cipher (unarmored)} -body {
     set c [::gpg::new]
     $c set -property armor -value false
     $c set -property passphrase-callback -value pcb1
     $c set -property encoding -value utf-8
-    set res [$c decrypt -input [$c encrypt -input $message]]
-    $c free
-    set res
-} -result [list plaintext $message]
+    $c decrypt -input [$c encrypt -input $message]
+} -result [list plaintext $message] -cleanup {$c free}
 
 test encrypt-decrypt-1.3 {Symmetric cipher & incorrect passphrase} -body {
     set c [::gpg::new]
@@ -283,10 +276,11 @@ test encrypt-decrypt-1.3 {Symmetric cipher & incorrect passphrase} -body {
     $c set -property encoding -value utf-8
     set msg [$c encrypt -input $message]
     $c set -property passphrase-callback -value pcb2
-    set code [catch {$c decrypt -input $msg} res]
+    $c decrypt -input $msg
+} -cleanup {
     $c free
-    list $code $res
-} -result {1 {Decryption failed}}
+    unset msg
+} -returnCodes error -result {Decryption failed}
 
 test encrypt-decrypt-1.4 {Symmetric cipher & missing passphrase} -body {
     set c [::gpg::new]
@@ -295,10 +289,11 @@ test encrypt-decrypt-1.4 {Symmetric cipher & missing passphrase} -body {
     $c set -property encoding -value utf-8
     set msg [$c encrypt -input $message]
     $c set -property passphrase-callback -value pcb3
-    set code [catch {$c decrypt -input $msg} res]
+    $c decrypt -input $msg
+} -cleanup {
     $c free
-    list $code $res
-} -result {1 {No passphrase}}
+    unset msg
+} -returnCodes error -result {No passphrase}
 
 test sign-verify-1.1 {Ordinary sign (armored)} -body {
     set c [::gpg::new]
@@ -308,8 +303,10 @@ test sign-verify-1.1 {Ordinary sign (armored)} -body {
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     set sig [$c sign -input $message]
     array set ares [$c verify -signature $sig]
-    $c free
     list $ares(status) $ares(plaintext)
+} -cleanup {
+    $c free
+    unset sig ares
 } -result [list good $message]
 
 test sign-verify-1.2 {Ordinary sign (unarmored)} -body {
@@ -320,8 +317,10 @@ test sign-verify-1.2 {Ordinary sign (unarmored)} -body {
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     set sig [$c sign -input $message]
     array set ares [$c verify -signature $sig]
-    $c free
     list $ares(status) $ares(plaintext)
+} -cleanup {
+    $c free
+    unset sig ares
 } -result [list good $message]
 
 test sign-verify-1.3 {Detached sign (armored)} -body {
@@ -332,8 +331,12 @@ test sign-verify-1.3 {Detached sign (armored)} -body {
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     set sig [$c sign -input $message -mode detach]
     array set ares [$c verify -signature $sig -input $message]
-    $c free
+    # TODO remove when the test is fixed:
+    puts [outputChannel] [array names ares]
     list $ares(status) $ares(plaintext)
+} -cleanup {
+    $c free
+    unset sig ares
 } -result [list good $message]
 
 test sign-verify-1.4 {Detached sign (unarmored)} -body {
@@ -344,8 +347,12 @@ test sign-verify-1.4 {Detached sign (unarmored)} -body {
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     set sig [$c sign -input $message -mode detach]
     array set ares [$c verify -signature $sig -input $message]
-    $c free
+    # TODO remove when the test is fixed:
+    puts [outputChannel] [array names ares]
     list $ares(status) $ares(plaintext)
+} -cleanup {
+    $c free
+    unset sig ares
 } -result [list good $message]
 
 test sign-verify-1.5 {Clear sign} -body {
@@ -355,8 +362,10 @@ test sign-verify-1.5 {Clear sign} -body {
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     set sig [$c sign -input $message -mode clear]
     array set ares [$c verify -signature $sig]
-    $c free
     list $ares(status) $ares(plaintext)
+} -cleanup {
+    $c free
+    unset sig ares
 } -result [list good $message\n]
 
 test sign-1.1 {Sign with no passphrase} -body {
@@ -364,20 +373,16 @@ test sign-1.1 {Sign with no passphrase} -body {
     $c set -property passphrase-callback -value pcb3
     $c set -property encoding -value utf-8
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
-    set code [catch {$c sign -input $message} res]
-    $c free
-    list $code $res
-} -result {1 {No passphrase}}
+    $c sign -input $message
+} -returnCodes error -result {No passphrase}
 
 test sign-1.2 {Sign with incorrect passphrase} -body {
     set c [::gpg::new]
     $c set -property passphrase-callback -value pcb2
     $c set -property encoding -value utf-8
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
-    set code [catch {$c sign -input $message} res]
-    $c free
-    list $code $res
-} -result {1 {Bad passphrase}}
+    $c sign -input $message
+} -returnCodes error -result {Bad passphrase}
 
 cleanupTests
 
