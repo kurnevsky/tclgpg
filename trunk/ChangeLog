@@ -17,6 +17,8 @@
 	  - Corrected error message [set] returns when
 	    the option being queried is not set.
 
+	* doc/gpg.man: Reformatted man page.
+
 2009-08-16  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Moved error generating code to a separate procedure.
