@@ -337,13 +337,11 @@ test sign-verify-1.3 {Detached sign (armored)} -body {
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     set sig [$c sign -input $message -mode detach]
     array set ares [$c verify -signature $sig -input $message]
-    # TODO remove when the test is fixed:
-    puts [outputChannel] [array names ares]
-    list $ares(status) $ares(plaintext)
+    set ares(status)
 } -cleanup {
     $c free
     unset sig ares
-} -result [list good $message]
+} -result good
 
 test sign-verify-1.4 {Detached sign (unarmored)} -body {
     set c [::gpg::new]
@@ -353,13 +351,11 @@ test sign-verify-1.4 {Detached sign (unarmored)} -body {
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     set sig [$c sign -input $message -mode detach]
     array set ares [$c verify -signature $sig -input $message]
-    # TODO remove when the test is fixed:
-    puts [outputChannel] [array names ares]
-    list $ares(status) $ares(plaintext)
+    set ares(status)
 } -cleanup {
     $c free
     unset sig ares
-} -result [list good $message]
+} -result good
 
 test sign-verify-1.5 {Clear sign} -body {
     set c [::gpg::new]
@@ -380,7 +376,7 @@ test sign-1.1 {Sign with no passphrase} -body {
     $c set -property encoding -value utf-8
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     $c sign -input $message
-} -returnCodes error -result {No passphrase}
+} -returnCodes error -result {No passphrase} -cleanup {$c free}
 
 test sign-1.2 {Sign with incorrect passphrase} -body {
     set c [::gpg::new]
@@ -388,7 +384,7 @@ test sign-1.2 {Sign with incorrect passphrase} -body {
     $c set -property encoding -value utf-8
     $c set -property signers -value 0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712
     $c sign -input $message
-} -returnCodes error -result {Bad passphrase}
+} -returnCodes error -result {Bad passphrase} -cleanup {$c free}
 
 cleanupTests
 

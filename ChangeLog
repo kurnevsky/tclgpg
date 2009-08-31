@@ -1,3 +1,8 @@
+2009-08-31  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.test: Fixed results in two tests and added cleanup code
+	  for other two.
+
 2009-08-20  Konstantin Khomoutov  <flatworm@users.sourceforge.net>
 
 	* tclgpg.test: Improved test suite:
