@@ -386,6 +386,26 @@ test sign-1.2 {Sign with incorrect passphrase} -body {
     $c sign -input $message
 } -returnCodes error -result {Bad passphrase} -cleanup {$c free}
 
+test encrypt-1.1 {Encrypt to unknown recipient} -body {
+    set c [::gpg::new]
+    set r [::gpg::recipient]
+    $r add -name unknown@example.org -validity full
+    $c encrypt -input $message -recipients $r
+} -cleanup {
+    $c free
+    $r free
+} -returnCodes error -result {Public key not found}
+
+#test encrypt-1.2 {Encrypt to a recipient with expired key} -body {
+#    set c [::gpg::new]
+#    set r [::gpg::recipient]
+#    $r add -name ??? -validity full
+#    $c encrypt -input $message -recipients $r
+#} -cleanup {
+#    $c free
+#    $r free
+#} -returnCodes error -result {Unusable public key}
+
 cleanupTests
 
 # vim:ts=8:sw=4:sts=4:et:ft=tcl

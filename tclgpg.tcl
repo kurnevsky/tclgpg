@@ -1590,6 +1590,18 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
             UNEXPECTED {
                 set state(sig:status) nosig
             }
+            INV_RECP {
+                switch -- [lindex $fields 2] {
+                    0 - 1 - 2 {
+                        FinishWithError $channels $commands "Public key not found"
+                        return
+                    }
+                    default {
+                        FinishWithError $channels $commands "Unusable public key"
+                        return
+                    }
+                }
+            }
         }
     }
 
