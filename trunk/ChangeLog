@@ -1,3 +1,10 @@
+2009-10-10  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl, tclgpg.test: Don't issue broken pipe error in case when
+	  recipient's public key is missing or unusable.
+
+	* gnupg/pubring.gpg~, gnupg/random_seed: Removed unnecessary files.
+
 2009-08-31  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.test: Fixed results in two tests and added cleanup code
