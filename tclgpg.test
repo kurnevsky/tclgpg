@@ -301,6 +301,19 @@ test encrypt-decrypt-1.4 {Symmetric cipher & missing passphrase} -body {
     unset msg
 } -returnCodes error -result {No passphrase}
 
+test encrypt-decrypt-1.5 {Symmetric cipher & missing passphrase callback} -body {
+    set c [::gpg::new]
+    $c set -property armor -value true
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    set msg [$c encrypt -input $message]
+    $c unset -property passphrase-callback
+    $c decrypt -input $msg
+} -cleanup {
+    $c free
+    unset msg
+} -returnCodes error -result {No passphrase callback}
+
 test sign-verify-1.1 {Ordinary sign (armored)} -body {
     set c [::gpg::new]
     $c set -property armor -value true
