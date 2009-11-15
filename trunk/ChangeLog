@@ -1,3 +1,11 @@
+2009-11-15  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Fixed decrypting and signing if gpg-agent is used for
+	  passphrase handling (closes: #2). Clarified error message in case
+	  when passphrase callback isn't specified.
+
+	* tclgpg.test: Added test for decrypting without passphrase callback.
+
 2009-10-10  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl, tclgpg.test: Don't issue broken pipe error in case when

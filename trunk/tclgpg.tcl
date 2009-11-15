@@ -1405,64 +1405,44 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
             }
             NEED_PASSPHRASE {
                 set state(badpassphrase) 0
-                if {![package vsatisfies $Version 2.0]} {
-                    if {![info exists state(hint)]} {
-                        set state(hint) enter
-                    } else {
-                        set state(hint) try_again
-                    }
-                    if {[catch {Set $token -property passphrase-callback} pcb]} {
-                        FinishWithError $channels $commands "No passphrase"
-                        return
-                    }
-                    set arglist [list token $token \
-                                      hint $state(hint) \
-                                      userid $state(userid_hint) \
-                                      keyid [lindex $fields 2] \
-                                      subkeyid [lindex $fields 3]]
-                    Debug 2 $arglist
-                    if {[catch {eval $pcb [list $arglist]} passphrase]} {
-                        FinishWithError $channels $commands "No passphrase"
-                        return
-                    } else {
-                        # Passphrase encoding may differ from message encoding,
-                        # so we have to save command-fd encoding in case when
-                        # command-fd and stdin are the same channel.
-
-                        set encoding [fconfigure $command_fd -encoding]
-                        fconfigure $command_fd \
-                            -encoding [Set $token -property passphrase-encoding]
-                        puts $command_fd $passphrase
-                        flush $command_fd
-                        fconfigure $command_fd -encoding $encoding
-                    }
+                if {![info exists state(hint)]} {
+                    set state(hint) enter
+                } else {
+                    set state(hint) try_again
                 }
+                set state(arglist) [list token $token \
+                                         hint $state(hint) \
+                                         userid $state(userid_hint) \
+                                         keyid [lindex $fields 2] \
+                                         subkeyid [lindex $fields 3]]
+                Debug 2 $state(arglist)
             }
             NEED_PASSPHRASE_SYM {
                 set state(badpassphrase) 0
-                if {![package vsatisfies $Version 2.0]} {
-                    if {[catch {Set $token -property passphrase-callback} pcb]} {
-                        FinishWithError $channels $commands "No passphrase"
-                        return
-                    }
-                    if {[catch {
-                            eval $pcb [list [list token $token \
-                                                  hint enter]]
-                         } passphrase]} {
-                        FinishWithError $channels $commands "No passphrase"
-                        return
-                    } else {
-                        # Passphrase encoding may differ from message encoding,
-                        # so we have to save command-fd encoding in case when
-                        # command-fd and stdin are the same channel.
+                set state(hint) enter
+                set state(arglist) [list token $token \
+                                         hint $state(hint)]
+                Debug 2 $state(arglist)
+            }
+            GET_HIDDEN {
+                if {[catch {Set $token -property passphrase-callback} pcb]} {
+                    FinishWithError $channels $commands "No passphrase callback"
+                    return
+                }
+                if {[catch {eval $pcb [list $state(arglist)]} passphrase]} {
+                    FinishWithError $channels $commands "No passphrase"
+                    return
+                } else {
+                    # Passphrase encoding may differ from message encoding,
+                    # so we have to save command-fd encoding in case when
+                    # command-fd and stdin are the same channel.
 
-                        set encoding [fconfigure $command_fd -encoding]
-                        fconfigure $command_fd \
-                            -encoding [Set $token -property passphrase-encoding]
-                        puts $command_fd $passphrase
-                        flush $command_fd
-                        fconfigure $command_fd -encoding $encoding
-                    }
+                    set encoding [fconfigure $command_fd -encoding]
+                    fconfigure $command_fd \
+                        -encoding [Set $token -property passphrase-encoding]
+                    puts $command_fd $passphrase
+                    flush $command_fd
+                    fconfigure $command_fd -encoding $encoding
                 }
             }
             BAD_PASSPHRASE {
