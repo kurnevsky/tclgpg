@@ -1,3 +1,14 @@
+2010-07-02  Sergei Golovan  <sgolovan@nes.ru>
+
+	* configure.in: Moved AC_PROG_INSTALL macro out of enable-c-helper
+	  check because when it is processed by autoconf 2.65 it expands only
+	  once leaving INSTALL variable empty if --disable-c-helper is
+	  specified (closes: #3). The (harmless) drawback is that earlier
+	  autoconf versions create configure script that runs AC_PROG_INSTALL
+	  twice in case of --enable-c-helper.
+
+	* doc/gpg.man: Added the list of adjustable GPG token properties.
+
 2009-11-15  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Fixed decrypting and signing if gpg-agent is used for
