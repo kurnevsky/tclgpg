@@ -1,7 +1,7 @@
 [comment {-*- tcl -*- doctools manpage}]
 [comment {$Id$}]
 [manpage_begin gpg n 1.0]
-[copyright {2008-2009 Sergei Golovan <sgolovan@nes.ru>}]
+[copyright {2008-2010 Sergei Golovan <sgolovan@nes.ru>}]
 [moddesc {Tcl interface to GNU Privacy Guard}]
 [titledesc {Tcl Interface to GnuPG}]
 [require Tcl 8.4]
@@ -30,6 +30,22 @@ Destroy GPG token and free its resources.
       [opt [arg "-value value"]]]
 
 Set or query a specified property.
+
+The property argument may be one of the following:
+
+[list_begin definitions]
+
+[def "[cmd armor] [arg boolean]"]
+
+[def "[cmd textmode] [arg boolean]"]
+
+[def "[cmd passphrase-callback] [arg command]"]
+
+[def [cmd "encoding"]]
+
+[def [cmd "passphrase-encoding"]]
+
+[list_end]
 
 [call [cmd "\$gpg"] \
         [arg "unset"] \
