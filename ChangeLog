@@ -1,3 +1,9 @@
+2011-01-29  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Added --use-agent option to the gpg call, which makes
+	  gpg using gpg-agent if it's present instead of an internal
+	  passphrase callback (Fixes issue 4).
+
 2010-07-02  Sergei Golovan  <sgolovan@nes.ru>
 
 	* configure.in: Moved AC_PROG_INSTALL macro out of enable-c-helper
