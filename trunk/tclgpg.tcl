@@ -1059,11 +1059,12 @@ proc ::gpg::Algorithm {code} {
 # ::gpg::ExecGPG --
 #
 #       Spawn a new gpg process adding several common arguments to a supplied
-#       arguments list. Added arguments are --no-tty, --quiet, --output -,
-#       --status-fd 2. If --batch doesn't belong to aruments list then
-#       --command-fd 0 is also added. But if the proc CExecGPG exists then it
-#       is called and its result is returned to a caller (with prepended empty
-#       string to show that there's no temporary file to delete).
+#       arguments list. Added arguments are --use-agent --no-tty, --quiet,
+#       --output -, --status-fd 2. If --batch doesn't belong to aruments list
+#       then --command-fd 0 is also added. But if the proc CExecGPG exists
+#       then it is called and its result is returned to a caller (with
+#       prepended empty string to show that there's no temporary file to
+#       delete).
 #
 # Arguments:
 #       token       A GPG context token created in ::gpg::context.
@@ -1090,9 +1091,11 @@ proc ::gpg::Algorithm {code} {
 proc ::gpg::ExecGPG {token operation args} {
     Debug 1 $args
 
-    # Add common --no-tty, --quiet, --output -, --charset utf-8 arguments
+    # Add common --use-agent --no-tty, --quiet, --output -, --charset utf-8
+    # arguments
 
-    set args [linsert $args 0 --no-tty --quiet --output - --charset utf-8]
+    set args [linsert $args 0 --use-agent --no-tty --quiet --output - \
+                              --charset utf-8]
 
     # Set --armor option before calling CExecGPG
 
