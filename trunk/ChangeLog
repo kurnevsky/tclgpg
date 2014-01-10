@@ -1,3 +1,12 @@
+2014-01-10  Sergei Golovan  <sgolovan@nes.ru>
+
+	* tclgpg.tcl: Fixed encrypting to the recipients with several public
+	  keys where some of them are expired or revoked.
+
+	* tclgpg.test: Covered the change above.
+
+	* doc/gpg.man, tclgpg.tcl, tclgpg.test: Extended copyright period.
+
 2011-01-29  Sergei Golovan  <sgolovan@nes.ru>
 
 	* tclgpg.tcl: Added --use-agent option to the gpg call, which makes

@@ -1,7 +1,7 @@
 [comment {-*- tcl -*- doctools manpage}]
 [comment {$Id$}]
 [manpage_begin gpg n 1.0]
-[copyright {2008-2010 Sergei Golovan <sgolovan@nes.ru>}]
+[copyright {2008-2014 Sergei Golovan <sgolovan@nes.ru>}]
 [moddesc {Tcl interface to GNU Privacy Guard}]
 [titledesc {Tcl Interface to GnuPG}]
 [require Tcl 8.4]
