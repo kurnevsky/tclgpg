@@ -2,7 +2,7 @@
 #
 #       This file is part of the TclGPG library. It contains tests.
 #
-# Copyright (c) 2008-2009 Sergei Golovan <sgolovan@nes.ru>
+# Copyright (c) 2008-2014 Sergei Golovan <sgolovan@nes.ru>
 #
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAMER OF ALL WARRANTIES.
@@ -173,13 +173,17 @@ test unset-1.8 {Unset with an incorrect option} -body {
     -result {unknown option "-prop": must be -property} \
     -cleanup {$c free}
 
+set keylist {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
+             2F97ECD7444AB86A649A2138DBD996EC2D5BBFDB\
+             61F33F648D8D47DC21F5CE1F1FC8896DFEA3B10D\
+             6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
+             CC13143A088AEECCB99AF05778E9B5C778DC9112\
+             E815CCABAEF4BBEA0DDD654D137F583FA1E4655D}
+
 test list-keys-1.1 {List all public keys synchronously} -body {
     set c [::gpg::new]
     lsort [$c list-keys]
-} -result {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
-        6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
-        CC13143A088AEECCB99AF05778E9B5C778DC9112} \
-    -cleanup {$c free}
+} -result $keylist -cleanup {$c free}
 
 test list-keys-1.2 {List all public keys asynchronously} -setup {
     proc ::result {status keys} {
@@ -195,22 +199,18 @@ test list-keys-1.2 {List all public keys asynchronously} -setup {
     $c free
     rename ::result ""
     unset ::listkeys
-} -result {ok {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
-        6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
-        CC13143A088AEECCB99AF05778E9B5C778DC9112}}
+} -result [list ok $keylist]
 
 test list-keys-1.3 {List matching public keys synchronously} -body {
     set c [::gpg::new]
     $c list-keys -patterns {revoked}
-} -result {6A5E179C7201BA252BEEC16F36F27239DFA10A4E} -cleanup {$c free}
+} -result {6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
+        2F97ECD7444AB86A649A2138DBD996EC2D5BBFDB} -cleanup {$c free}
 
 test list-keys-2.1 {List all secret keys synchronously} -body {
     set c [::gpg::new]
     lsort [$c list-keys -secretonly true]
-} -result {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
-        6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
-        CC13143A088AEECCB99AF05778E9B5C778DC9112} \
-    -cleanup {$c free}
+} -result $keylist -cleanup {$c free}
 
 test list-keys-2.2 {List all secret keys asynchronously} -setup {
     proc ::result {status keys} {
@@ -226,9 +226,7 @@ test list-keys-2.2 {List all secret keys asynchronously} -setup {
     $c free
     rename ::result ""
     unset ::listkeys
-} -result {ok {0FCE5909C0AD7044BAF1C2A94A6276E6C52F1712\
-        6A5E179C7201BA252BEEC16F36F27239DFA10A4E\
-        CC13143A088AEECCB99AF05778E9B5C778DC9112}}
+} -result [list ok $keylist]
 
 test list-keys-2.3 {List matching secret keys synchronously} -body {
     set c [::gpg::new]
@@ -399,25 +397,117 @@ test sign-1.2 {Sign with incorrect passphrase} -body {
     $c sign -input $message
 } -returnCodes error -result {Bad passphrase} -cleanup {$c free}
 
+test sign-1.3 {Sign with revoked key} -body {
+    set c [::gpg::new]
+    $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
+    $c set -property signers -value 6A5E179C7201BA252BEEC16F36F27239DFA10A4E
+    $c sign -input $message
+} -returnCodes error -result {Key is unusable} -cleanup {$c free}
+
 test encrypt-1.1 {Encrypt to unknown recipient} -body {
     set c [::gpg::new]
     set r [::gpg::recipient]
     $r add -name unknown@example.org -validity full
+    puts stderr [$c encrypt -input $message -recipients $r]
+} -cleanup {
+    $c free
+    $r free
+} -returnCodes error -result {Public key not found}
+
+test encrypt-1.2 {Encrypt to a recipient with expired key} -body {
+    set c [::gpg::new]
+    set r [::gpg::recipient]
+    $r add -name sergei@golovan.ru -validity full
     $c encrypt -input $message -recipients $r
 } -cleanup {
     $c free
     $r free
 } -returnCodes error -result {Public key not found}
 
-#test encrypt-1.2 {Encrypt to a recipient with expired key} -body {
-#    set c [::gpg::new]
-#    set r [::gpg::recipient]
-#    $r add -name ??? -validity full
-#    $c encrypt -input $message -recipients $r
-#} -cleanup {
-#    $c free
-#    $r free
-#} -returnCodes error -result {Unusable public key}
+test encrypt-1.3 {Encrypt to a recipient with revoked key} -body {
+    set c [::gpg::new]
+    set r [::gpg::recipient]
+    $r add -name sergei1@golovan.ru -validity full
+    $c encrypt -input $message -recipients $r
+} -cleanup {
+    $c free
+    $r free
+} -returnCodes error -result {Public key not found}
+
+test encrypt-1.4 {Encrypt to a recipient with both expired&valid keys} -body {
+    set c [::gpg::new]
+    set r [::gpg::recipient]
+    $r add -name sgolovan@gmail.com -validity full
+    $c encrypt -input $message -recipients $r
+    list ok ; # only testing non-error status
+} -cleanup {
+    $c free
+    $r free
+} -result {ok}
+
+test decrypt-1.1 {Decrypt with a revoked key} -body {
+    set c [::gpg::new]
+    $c set -property passphrase-callback -value pcb1
+    $c decrypt -input \
+"-----BEGIN PGP MESSAGE-----
+Version: GnuPG v1.4.6 (GNU/Linux)
+
+hIwDH92Qmdvb5zoBA/0ZuZSuX/t7mybydfWfgiAuWttcvMKbT71MgyMlI9JJHK5/
+D2qq0bISQAClMBYuFmv12TM5ar3jp/ixbOfXsTLbWtim4asHdZYQ0Adm9Z8umHjm
+38GZo7NWg/kEnPGyElmmBqvBHbgdpV1ToswQY+yxYRibpCuCCgZbFr4ml9IFBdJO
+AbzATKk7pm5fkM9lHy/k4DHDwtpYmjuBId7H/muc0yYCFjSY0CpBFWmW0r/1GSRI
+NZCKk8sVxdQlM039q/PjwvwuJ5HVcw9SjrxluFky
+=tcxU
+-----END PGP MESSAGE-----"
+} -cleanup {
+    $c free
+} -result [list plaintext $message]
+
+test decrypt-1.2 {Decrypt incorrect message} -body {
+    set c [::gpg::new]
+    $c set -property passphrase-callback -value pcb1
+    $c decrypt -input \
+"-----BEGIN PGP MESSAGE-----
+Version: GnuPG v1.4.6 (GNU/Linux)
+
+hIwDH92Qmdvb5zoBA/0ZuZSuX/t7mybydfWfgiAuWttcvMKbT71MgyMlI9JJHK5/
+AbzATKk7pm5fkM9lHy/k4DHDwtpYmjuBId7H/muc0yYCFjSY0CpBFWmW0r/1GSRI
+NZCKk8sVxdQlM039q/PjwvwuJ5HVcw9SjrxluFky
+=tcxU
+-----END PGP MESSAGE-----"
+} -cleanup {
+    $c free
+} -returnCodes error -result {Encrypted message is corrupted}
+
+test decrypt-1.3 {Decrypt with an incorrect passphrase} -body {
+    set c [::gpg::new]
+    $c set -property passphrase-callback -value pcb2
+    $c decrypt -input \
+"-----BEGIN PGP MESSAGE-----
+Version: GnuPG v1.4.6 (GNU/Linux)
+
+hIwDH92Qmdvb5zoBA/0ZuZSuX/t7mybydfWfgiAuWttcvMKbT71MgyMlI9JJHK5/
+D2qq0bISQAClMBYuFmv12TM5ar3jp/ixbOfXsTLbWtim4asHdZYQ0Adm9Z8umHjm
+38GZo7NWg/kEnPGyElmmBqvBHbgdpV1ToswQY+yxYRibpCuCCgZbFr4ml9IFBdJO
+AbzATKk7pm5fkM9lHy/k4DHDwtpYmjuBId7H/muc0yYCFjSY0CpBFWmW0r/1GSRI
+NZCKk8sVxdQlM039q/PjwvwuJ5HVcw9SjrxluFky
+=tcxU
+-----END PGP MESSAGE-----"
+} -cleanup {
+    $c free
+} -returnCodes error -result {Decryption failed}
+
+test decrypt-1.4 {Decrypt and check the signature} -body {
+    set c [::gpg::new]
+    set r [::gpg::recipient]
+    $r add -name sgolovan@gmail.com -validity full
+    $c encrypt -input $message -recipients $r
+    list ok ; # only testing non-error status
+} -cleanup {
+    $c free
+    $r free
+} -result {ok}
 
 cleanupTests
 

@@ -2,7 +2,7 @@
 #
 #        Tcl interface to GNU Privacy Guard.
 #
-# Copyright (c) 2008-2009 Sergei Golovan <sgolovan@nes.ru>
+# Copyright (c) 2008-2014 Sergei Golovan <sgolovan@nes.ru>
 #
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAMER OF ALL WARRANTIES.
@@ -1370,6 +1370,8 @@ proc ::gpg::UseGPG {token operation commands channels {input ""}} {
 }
 
 proc ::gpg::ParseGPG {token operation commands channels input} {
+    Debug 2 "$token $operation $commands $channels $input"
+
     variable Version
     variable keys
 
@@ -1388,6 +1390,8 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
         set state(signatures) {}
     }
 
+    set state(decryption_started) 0
+
     # Parse gpg status output
 
     set eof 0
@@ -1400,8 +1404,15 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
         switch -- [lindex $fields 1] {
             BEGIN_ENCRYPTION -
             BEGIN_SIGNING {
+                set state(keyexpired) 0
+                set state(keyrevoked) 0
                 set eof 1
                 break
+            }
+            BEGIN_DECRYPTION {
+                set state(keyexpired) 0
+                set state(keyrevoked) 0
+                set state(decryption_started) 1
             }
             USERID_HINT {
                 set state(userid_hint) [join [lrange $fields 3 end]]
@@ -1460,8 +1471,7 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                     "" -
                     verify {}
                     default {
-                        FinishWithError $channels $commands "Key expired"
-                        return
+                        set state(keyexpired) 1
                     }
                 }
             }
@@ -1470,8 +1480,7 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
                     "" -
                     verify {}
                     default {
-                        FinishWithError $channels $commands "Key revoked"
-                        return
+                        set state(keyrevoked) 1
                     }
                 }
             }
@@ -1594,7 +1603,17 @@ proc ::gpg::ParseGPG {token operation commands channels input} {
             return
         }
 
-        set data [FinishGPG $token $operation $channels $input]
+        if {[info exists state(keyexpired)] && $state(keyexpired)} {
+            FinishWithError $channels $commands "Key expired"
+            return
+        }
+
+        if {[info exists state(keyrevoked)] && $state(keyrevoked)} {
+            FinishWithError $channels $commands "Key revoked"
+            return
+        }
+
+        set data [FinishGPG $token $operation $channels $commands $input]
 
         CleanupGPG $channels
 
@@ -1618,7 +1637,7 @@ proc ::gpg::FinishWithError {channels commands error} {
     }
 }
 
-proc ::gpg::FinishGPG {token operation channels input} {
+proc ::gpg::FinishGPG {token operation channels commands input} {
     Debug 2 "$token $operation $channels $input"
 
     foreach {filename stdin_fd stdout_fd stderr_fd status_fd command_fd} \
@@ -1671,12 +1690,19 @@ proc ::gpg::FinishGPG {token operation channels input} {
         sign {
             # Supply message for encryption or signing
 
-            puts -nonewline $stdin_fd $input
+            if {[catch {puts -nonewline $stdin_fd $input}]} {
+                FinishWithError $channels $commands "Key is unusable"
+                return
+            }
             catch {close $stdin_fd}
 
             set data [read $stdout_fd]
         }
         decrypt {
+            if {!$state(decryption_started)} {
+                FinishWithError $channels $commands "Encrypted message is corrupted"
+                return
+            }
             set plaintext [read $stdout_fd]
             set data [list plaintext $plaintext]
         }
