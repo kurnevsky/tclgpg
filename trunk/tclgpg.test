@@ -449,6 +449,7 @@ test encrypt-1.4 {Encrypt to a recipient with both expired&valid keys} -body {
 test decrypt-1.1 {Decrypt with a revoked key} -body {
     set c [::gpg::new]
     $c set -property passphrase-callback -value pcb1
+    $c set -property encoding -value utf-8
     $c decrypt -input \
 "-----BEGIN PGP MESSAGE-----
 Version: GnuPG v1.4.6 (GNU/Linux)
